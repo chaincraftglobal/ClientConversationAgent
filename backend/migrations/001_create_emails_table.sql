@@ -1,0 +1,18 @@
+CREATE TABLE IF NOT EXISTS emails (
+  id SERIAL PRIMARY KEY,
+  agent_id INTEGER NOT NULL,
+  message_id VARCHAR(255) UNIQUE NOT NULL,
+  from_email VARCHAR(255) NOT NULL,
+  to_email VARCHAR(255) NOT NULL,
+  subject VARCHAR(500),
+  body TEXT,
+  email_hash VARCHAR(64) UNIQUE NOT NULL,
+  received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  processed BOOLEAN DEFAULT FALSE,
+  response_sent BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_message ON emails(agent_id, message_id);
+CREATE INDEX IF NOT EXISTS idx_email_hash ON emails(email_hash);
