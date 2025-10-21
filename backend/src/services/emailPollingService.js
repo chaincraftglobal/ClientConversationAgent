@@ -5,10 +5,12 @@ const crypto = require('crypto');
 const { generateResponse } = require('./aiService');
 const { sendEmail } = require('./emailService');
 const messageAnalyzerService = require('./messageAnalyzerService');
+const attachmentService = require('./attachmentService');
+
 // Encryption
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '12345678901234567890123456789012';
 const ALGORITHM = 'aes-256-cbc';
-const attachmentService = require('./attachmentService');
+
 // Global processing lock
 const processingMessages = new Set();
 let isPolling = false;
@@ -235,14 +237,15 @@ const processIncomingEmail = async (agent, parsedEmail) => {
 
         const assignment = assignmentResult.rows[0];
 
-        // Store incoming message
+        // Store incoming message with initial status
         const messageResult = await pool.query(
             `INSERT INTO messages (
                 assignment_id, message_id, subject, sender_email, recipient_email,
-                sender_type, body_text, email_received_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+                sender_type, body_text, email_received_at, 
+                reply_status, urgency_level, emotional_tone
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, $8, $9, $10)
             RETURNING *`,
-            [assignment.id, messageId, subject, clientEmail, agent.email, 'client', bodyText]
+            [assignment.id, messageId, subject, clientEmail, agent.email, 'client', bodyText, 'analyzing', null, null]
         );
 
         console.log(`✅ Stored client message ID: ${messageResult.rows[0].id}`);
@@ -267,19 +270,16 @@ const processIncomingEmail = async (agent, parsedEmail) => {
         }
         // ============================================
 
-
-        // Get conversation history
-        // Get conversation history
         // Get FULL conversation history (no limit)
         const historyResult = await pool.query(
             `SELECT 
-        m.*,
-        COUNT(a.id) as attachment_count
-     FROM messages m
-     LEFT JOIN attachments a ON m.id = a.message_id
-     WHERE m.assignment_id = $1
-     GROUP BY m.id
-     ORDER BY m.created_at ASC`,
+                m.*,
+                COUNT(a.id) as attachment_count
+             FROM messages m
+             LEFT JOIN attachments a ON m.id = a.message_id
+             WHERE m.assignment_id = $1
+             GROUP BY m.id
+             ORDER BY m.created_at ASC`,
             [assignment.id]
         );
 
@@ -332,9 +332,27 @@ const processIncomingEmail = async (agent, parsedEmail) => {
         const delayMinutes = Math.round(delayMs / 60000);
 
         console.log(`⏰ Will reply in ${delayMinutes} minutes (at ${scheduledReplyTime.toISOString()})`);
+
+        // ============================================
+        // 💾 UPDATE MESSAGE WITH ANALYSIS & SCHEDULE
+        // ============================================
+        await pool.query(
+            `UPDATE messages 
+             SET urgency_level = $1, 
+                 emotional_tone = $2, 
+                 scheduled_reply_time = $3,
+                 reply_status = 'scheduled'
+             WHERE id = $4`,
+            [
+                messageAnalysis.urgencyLevel,
+                messageAnalysis.emotionalTone,
+                scheduledReplyTime,
+                messageResult.rows[0].id
+            ]
+        );
+        console.log(`💾 Stored reply schedule: ${scheduledReplyTime.toLocaleString()}`);
         // ============================================
 
-        // Build complete context for AI
         // Get list of attachments shared in this conversation
         const attachmentsResult = await pool.query(
             'SELECT original_filename, mime_type, created_at FROM attachments WHERE assignment_id = $1 ORDER BY created_at DESC',
@@ -387,7 +405,6 @@ Example redirect: "I appreciate your question, but let's keep our focus on the [
 ═══════════════════════════════════════════════════════════
 `;
 
-        // Generate AI response with full context
         // Generate AI response with full context and tone
         console.log('🤖 Generating AI response with project context and smart tone...');
         const aiResponse = await generateResponse(
@@ -412,7 +429,15 @@ Example redirect: "I appreciate your question, but let's keep our focus on the [
 
         console.log('✅ AI response generated');
 
-        // Delay to appear human
+        // ============================================
+        // ⏳ UPDATE STATUS TO SENDING
+        // ============================================
+        await pool.query(
+            `UPDATE messages SET reply_status = 'sending' WHERE id = $1`,
+            [messageResult.rows[0].id]
+        );
+        // ============================================
+
         // Smart delay based on message analysis
         console.log(`⏳ Waiting ${delayMinutes} minutes before replying...`);
         await new Promise(resolve => setTimeout(resolve, delayMs));
@@ -428,15 +453,25 @@ Example redirect: "I appreciate your question, but let's keep our focus on the [
         await pool.query(
             `INSERT INTO messages (
                 assignment_id, subject, sender_email, recipient_email,
-                sender_type, body_text, email_sent_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
-            [assignment.id, replySubject, agent.email, clientEmail, 'agent', aiResponse.response]
+                sender_type, body_text, email_sent_at, reply_status
+            ) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, $7)`,
+            [assignment.id, replySubject, agent.email, clientEmail, 'agent', aiResponse.response, 'sent']
         );
+
+        // ============================================
+        // ✅ MARK ORIGINAL MESSAGE AS SENT
+        // ============================================
+        await pool.query(
+            `UPDATE messages SET reply_status = 'sent' WHERE id = $1`,
+            [messageResult.rows[0].id]
+        );
+        // ============================================
 
         console.log('✅ AI reply sent and stored');
 
         // Store analysis metadata (for debugging/monitoring)
         console.log(`📝 Analysis metadata: Urgency=${messageAnalysis.urgencyLevel}, Tone=${messageAnalysis.emotionalTone}, Delay=${delayMinutes}min`);
+
         // ============================================
         // Mark as processed in deduplication table
         // ============================================

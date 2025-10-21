@@ -3,7 +3,9 @@ const router = express.Router();
 const {
     sendMessage,
     getMessagesByAssignment,
-    getMessageById
+    getMessageById,
+    getPendingReplies,
+    getReplyStatusByAssignment
 } = require('../controllers/messageController');
 const authMiddleware = require('../middleware/authMiddleware');
 
@@ -14,5 +16,9 @@ router.use(authMiddleware);
 router.post('/send', sendMessage);
 router.get('/assignment/:assignment_id', getMessagesByAssignment);
 router.get('/:id', getMessageById);
+
+// Reply status routes
+router.get('/pending-replies', getPendingReplies);
+router.get('/reply-status/:assignment_id', getReplyStatusByAssignment);
 
 module.exports = router;

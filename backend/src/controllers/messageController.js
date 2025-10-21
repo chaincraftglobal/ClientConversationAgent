@@ -149,6 +149,110 @@ const getMessageById = async (req, res) => {
     }
 };
 
+
+// Get pending reply status for assignments
+const getPendingReplies = async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT 
+                m.id as message_id,
+                m.assignment_id,
+                m.scheduled_reply_time,
+                m.reply_status,
+                m.urgency_level,
+                m.emotional_tone,
+                m.subject,
+                m.sender_email,
+                a.project_name,
+                ag.name as agent_name,
+                c.name as client_name,
+                EXTRACT(EPOCH FROM (m.scheduled_reply_time - NOW())) as seconds_until_reply
+            FROM messages m
+            JOIN agent_client_assignments a ON m.assignment_id = a.id
+            JOIN agents ag ON a.agent_id = ag.id
+            JOIN clients c ON a.client_id = c.id
+            WHERE m.reply_status IN ('analyzing', 'scheduled', 'sending')
+            AND m.sender_type = 'client'
+            ORDER BY m.scheduled_reply_time ASC`,
+            []
+        );
+
+        res.status(200).json({
+            success: true,
+            data: {
+                pendingReplies: result.rows.map(row => ({
+                    ...row,
+                    seconds_until_reply: Math.max(0, Math.round(row.seconds_until_reply)),
+                    minutes_until_reply: Math.max(0, Math.round(row.seconds_until_reply / 60))
+                }))
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching pending replies:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch pending replies',
+            error: error.message
+        });
+    }
+};
+
+// Get reply status for specific assignment
+const getReplyStatusByAssignment = async (req, res) => {
+    try {
+        const { assignment_id } = req.params;
+
+        const result = await pool.query(
+            `SELECT 
+                m.id as message_id,
+                m.assignment_id,
+                m.scheduled_reply_time,
+                m.reply_status,
+                m.urgency_level,
+                m.emotional_tone,
+                m.subject,
+                EXTRACT(EPOCH FROM (m.scheduled_reply_time - NOW())) as seconds_until_reply
+            FROM messages m
+            WHERE m.assignment_id = $1
+            AND m.reply_status IN ('analyzing', 'scheduled', 'sending')
+            AND m.sender_type = 'client'
+            ORDER BY m.scheduled_reply_time DESC
+            LIMIT 1`,
+            [assignment_id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(200).json({
+                success: true,
+                data: {
+                    hasReplyPending: false
+                }
+            });
+        }
+
+        const reply = result.rows[0];
+
+        res.status(200).json({
+            success: true,
+            data: {
+                hasReplyPending: true,
+                replyStatus: {
+                    ...reply,
+                    seconds_until_reply: Math.max(0, Math.round(reply.seconds_until_reply)),
+                    minutes_until_reply: Math.max(0, Math.round(reply.seconds_until_reply / 60))
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching reply status:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch reply status',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     sendMessage,
     getMessagesByAssignment,
