@@ -8,7 +8,7 @@ const messageAnalyzerService = require('./messageAnalyzerService');
 // Encryption
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '12345678901234567890123456789012';
 const ALGORITHM = 'aes-256-cbc';
-
+const attachmentService = require('./attachmentService');
 // Global processing lock
 const processingMessages = new Set();
 let isPolling = false;
@@ -247,12 +247,43 @@ const processIncomingEmail = async (agent, parsedEmail) => {
 
         console.log(`✅ Stored client message ID: ${messageResult.rows[0].id}`);
 
+        // ============================================
+        // 📎 SAVE ATTACHMENTS IF ANY
+        // ============================================
+        if (parsedEmail.attachments && parsedEmail.attachments.length > 0) {
+            console.log(`📎 Found ${parsedEmail.attachments.length} attachment(s)`);
+            try {
+                const savedAttachments = await attachmentService.saveAttachments(
+                    parsedEmail.attachments,
+                    messageResult.rows[0].id,
+                    assignment.id
+                );
+                console.log(`✅ Saved ${savedAttachments.length} attachment(s)`);
+            } catch (error) {
+                console.error('❌ Error saving attachments:', error);
+            }
+        } else {
+            console.log('📭 No attachments in this email');
+        }
+        // ============================================
+
+
         // Get conversation history
         // Get conversation history
+        // Get FULL conversation history (no limit)
         const historyResult = await pool.query(
-            `SELECT * FROM messages WHERE assignment_id = $1 ORDER BY created_at ASC LIMIT 10`,
+            `SELECT 
+        m.*,
+        COUNT(a.id) as attachment_count
+     FROM messages m
+     LEFT JOIN attachments a ON m.id = a.message_id
+     WHERE m.assignment_id = $1
+     GROUP BY m.id
+     ORDER BY m.created_at ASC`,
             [assignment.id]
         );
+
+        console.log(`📚 Loaded ${historyResult.rows.length} messages from full conversation history`);
 
         // ============================================
         // 🧠 SMART MESSAGE ANALYSIS
@@ -304,7 +335,22 @@ const processIncomingEmail = async (agent, parsedEmail) => {
         // ============================================
 
         // Build complete context for AI
+        // Get list of attachments shared in this conversation
+        const attachmentsResult = await pool.query(
+            'SELECT original_filename, mime_type, created_at FROM attachments WHERE assignment_id = $1 ORDER BY created_at DESC',
+            [assignment.id]
+        );
+
+        const attachmentsList = attachmentsResult.rows.length > 0
+            ? attachmentsResult.rows.map(att => `- ${att.original_filename} (${new Date(att.created_at).toLocaleDateString()})`).join('\n')
+            : 'No files shared yet';
+
+        // Build complete context for AI with strict boundaries
         const projectContext = `
+═══════════════════════════════════════════════════════════
+PROJECT CONTEXT - YOU MUST ONLY DISCUSS THIS PROJECT
+═══════════════════════════════════════════════════════════
+
 PROJECT DETAILS:
 - Project Name: ${assignment.project_name || 'Not specified'}
 - Budget: ${assignment.budget || 'Not specified'}
@@ -317,11 +363,28 @@ ${assignment.project_brief || 'Not provided'}
 CLIENT REQUIREMENTS:
 ${assignment.client_requirements || 'Not provided'}
 
+FILES SHARED IN THIS PROJECT:
+${attachmentsList}
+
 CONVERSATION INSTRUCTIONS:
 ${assignment.conversation_instructions || 'Be professional and helpful'}
 
 KEY POINTS TO REMEMBER:
 ${assignment.key_points || 'None specified'}
+
+═══════════════════════════════════════════════════════════
+CRITICAL INSTRUCTIONS:
+═══════════════════════════════════════════════════════════
+1. ONLY discuss topics related to THIS PROJECT ABOVE
+2. If client asks about unrelated topics, politely redirect to the project
+3. Always reference the project details when answering
+4. Remember all attachments/files that were shared
+5. Stay professional and focused on project delivery
+6. Do NOT answer general questions unrelated to this project
+7. If you don't know something about the project, say so - don't make it up
+
+Example redirect: "I appreciate your question, but let's keep our focus on the [project name] project. Regarding the project, [relevant response]..."
+═══════════════════════════════════════════════════════════
 `;
 
         // Generate AI response with full context
