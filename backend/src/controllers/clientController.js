@@ -28,10 +28,21 @@ const createClient = async (req, res) => {
 
         // Insert client
         const result = await pool.query(
-            `INSERT INTO clients (name, email, company, phone, notes)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, name, email, company, phone, notes, created_at, updated_at`,
-            [name, email, company, phone, notes]
+            `INSERT INTO clients (
+        name, email, email_password, email_provider, 
+        smtp_host, smtp_port, imap_host, imap_port,
+        phone, company, address, city, country, industry, website, notes,
+        timezone, working_hours_start, working_hours_end
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+    RETURNING *`,
+            [
+                name, email, encryptedPassword, email_provider,
+                smtp_host, smtp_port, imap_host, imap_port,
+                phone, company, address, city, country, industry, website, notes,
+                timezone || 'UTC',
+                working_hours_start || '09:00',
+                working_hours_end || '18:00'
+            ]
         );
 
         res.status(201).json({

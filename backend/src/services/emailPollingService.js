@@ -4,7 +4,7 @@ const pool = require('../config/database');
 const crypto = require('crypto');
 const { generateResponse } = require('./aiService');
 const { sendEmail } = require('./emailService');
-
+const messageAnalyzerService = require('./messageAnalyzerService');
 // Encryption
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '12345678901234567890123456789012';
 const ALGORITHM = 'aes-256-cbc';
@@ -254,6 +254,55 @@ const processIncomingEmail = async (agent, parsedEmail) => {
             [assignment.id]
         );
 
+        // ============================================
+        // 🧠 SMART MESSAGE ANALYSIS
+        // ============================================
+        console.log('🧠 Analyzing message for smart reply timing...');
+
+        // Get client timezone and working hours
+        const clientResult = await pool.query(
+            'SELECT timezone, working_hours_start, working_hours_end FROM clients WHERE id = $1',
+            [assignment.client_id]
+        );
+        const clientData = clientResult.rows[0] || {};
+
+        // Analyze the message
+        const messageAnalysis = await messageAnalyzerService.analyzeMessage({
+            messageContent: bodyText,
+            conversationHistory: historyResult.rows.map(msg => ({
+                sender: msg.sender_type,
+                content: msg.body_text,
+                created_at: msg.created_at
+            })),
+            assignmentSettings: {
+                min_reply_delay_minutes: assignment.min_reply_delay_minutes || 15,
+                max_reply_delay_minutes: assignment.max_reply_delay_minutes || 90,
+                enable_smart_timing: assignment.enable_smart_timing !== false
+            },
+            clientTimezone: clientData.timezone || 'UTC'
+        });
+
+        console.log(`📊 Message Analysis:
+- Urgency: ${messageAnalysis.urgencyLevel}/10
+- Tone: ${messageAnalysis.emotionalTone}
+- Suggested Delay: ${messageAnalysis.suggestedDelay} minutes
+- Reasoning: ${messageAnalysis.reasoning}`);
+
+        // Calculate scheduled reply time considering working hours
+        const scheduledReplyTime = messageAnalyzerService.calculateScheduledReplyTime(
+            messageAnalysis.suggestedDelay,
+            clientData.timezone || 'UTC',
+            clientData.working_hours_start || '09:00',
+            clientData.working_hours_end || '18:00',
+            messageAnalysis.shouldReplyDuringWorkingHours
+        );
+
+        const delayMs = scheduledReplyTime.getTime() - Date.now();
+        const delayMinutes = Math.round(delayMs / 60000);
+
+        console.log(`⏰ Will reply in ${delayMinutes} minutes (at ${scheduledReplyTime.toISOString()})`);
+        // ============================================
+
         // Build complete context for AI
         const projectContext = `
 PROJECT DETAILS:
@@ -276,14 +325,22 @@ ${assignment.key_points || 'None specified'}
 `;
 
         // Generate AI response with full context
-        console.log('🤖 Generating AI response with project context...');
+        // Generate AI response with full context and tone
+        console.log('🤖 Generating AI response with project context and smart tone...');
         const aiResponse = await generateResponse(
             agent.persona_description,
             agent.system_prompt,
             historyResult.rows,
             bodyText,
-            projectContext
+            projectContext,
+            {
+                tonePreference: assignment.reply_tone_preference || 'professional',
+                clientEmotionalTone: messageAnalysis.emotionalTone,
+                urgencyLevel: messageAnalysis.urgencyLevel
+            }
         );
+
+        console.log(`✅ AI response generated with tone: ${assignment.reply_tone_preference || 'professional'}, client emotion: ${messageAnalysis.emotionalTone}`);
 
         if (!aiResponse.success) {
             console.error('❌ AI generation failed:', aiResponse.error);
@@ -293,7 +350,10 @@ ${assignment.key_points || 'None specified'}
         console.log('✅ AI response generated');
 
         // Delay to appear human
-        await new Promise(resolve => setTimeout(resolve, 30000));
+        // Smart delay based on message analysis
+        console.log(`⏳ Waiting ${delayMinutes} minutes before replying...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        console.log('✅ Delay complete, sending reply now...');
 
         // Send reply
         console.log('📤 Sending AI reply...');
@@ -312,6 +372,8 @@ ${assignment.key_points || 'None specified'}
 
         console.log('✅ AI reply sent and stored');
 
+        // Store analysis metadata (for debugging/monitoring)
+        console.log(`📝 Analysis metadata: Urgency=${messageAnalysis.urgencyLevel}, Tone=${messageAnalysis.emotionalTone}, Delay=${delayMinutes}min`);
         // ============================================
         // Mark as processed in deduplication table
         // ============================================

@@ -54,12 +54,26 @@ const createAssignment = async (req, res) => {
 
         // Create assignment
         const result = await pool.query(
-            `INSERT INTO agent_client_assignments (agent_id, client_id, project_name, project_description)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, agent_id, client_id, project_name, project_description, status, assigned_at`,
-            [agent_id, client_id, project_name, project_description]
-        );
-
+    `INSERT INTO agent_client_assignments (
+        agent_id, client_id, project_name, budget, deadline,
+        project_description, detailed_brief, client_requirements,
+        ai_instructions, key_points,
+        reply_tone_preference, enable_smart_timing, 
+        min_reply_delay_minutes, max_reply_delay_minutes,
+        status
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+    RETURNING *`,
+    [
+        agent_id, client_id, project_name, budget, deadline,
+        project_description, detailed_brief, client_requirements,
+        ai_instructions, key_points,
+        reply_tone_preference || 'professional',
+        enable_smart_timing !== false,
+        min_reply_delay_minutes || 15,
+        max_reply_delay_minutes || 90,
+        'active'
+    ]
+);
         // Get agent and client details
         const assignment = result.rows[0];
         const agent = agentExists.rows[0];
