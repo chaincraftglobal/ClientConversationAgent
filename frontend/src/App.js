@@ -11,6 +11,11 @@ import CreateAgent from './pages/CreateAgent';  // ✅ ADD THIS
 import CreateClient from './pages/CreateClient';
 import CreateAssignment from './pages/CreateAssignment';
 import PaymentGatewaySettings from './pages/PaymentGatewaySettings';
+import MerchantDashboard from './pages/MerchantDashboard';
+import AddMerchantAccount from './pages/AddMerchantAccount';
+
+import ViewMerchantAccount from './pages/ViewMerchantAccount';
+import EditMerchantAccount from './pages/EditMerchantAccount';
 
 
 // Protected Route Component
@@ -86,6 +91,14 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/merchants"
+        element={
+          <ProtectedRoute>
+            <MerchantDashboard />
+          </ProtectedRoute>
+        }
+      />
 
       {/* ✅ ADD THIS ROUTE */}
       <Route
@@ -107,10 +120,36 @@ function AppRoutes() {
       />
 
       <Route
+        path="/merchants/add"
+        element={
+          <ProtectedRoute>
+            <AddMerchantAccount />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
         path="/clients/create"
         element={
           <ProtectedRoute>
             <CreateClient />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/merchants/view/:id"
+        element={
+          <ProtectedRoute>
+            <ViewMerchantAccount />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/merchants/edit/:id"
+        element={
+          <ProtectedRoute>
+            <EditMerchantAccount />
           </ProtectedRoute>
         }
       />

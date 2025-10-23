@@ -23,5 +23,6 @@ router.get('/transactions', paymentGatewayController.getTransactions);
 
 // Dashboard summary
 router.get('/dashboard', paymentGatewayController.getDashboardSummary);
+router.post('/test-credentials', paymentGatewayController.testCredentials);  // ✅ ADD THIS
 
 module.exports = router;

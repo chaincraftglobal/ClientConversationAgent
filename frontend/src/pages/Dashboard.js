@@ -180,7 +180,7 @@ const Dashboard = () => {
             <nav className="bg-white shadow-sm mt-2">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex space-x-8 py-4">
-                        <button className="text-blue-600 font-semibold border-b-2 border-blue-600 pb-2">
+                        <button onClick={() => navigate('/dashboard')} className="text-blue-600 font-semibold border-b-2 border-blue-600 pb-2">
                             Overview
                         </button>
                         <button onClick={() => navigate('/agents')} className="text-gray-600 hover:text-gray-900">
@@ -192,8 +192,11 @@ const Dashboard = () => {
                         <button onClick={() => navigate('/assignments')} className="text-gray-600 hover:text-gray-900">
                             Assignments
                         </button>
-                        <button onClick={() => navigate('/chat')} className="text-gray-600 hover:text-gray-900">
-                            Chat
+                        <button onClick={() => navigate('/payment-gateway')} className="text-gray-600 hover:text-gray-900">
+                            💳 Payment Monitor
+                        </button>
+                        <button onClick={() => navigate('/merchants')} className="text-gray-600 hover:text-gray-900">
+                            📧 Merchant Manager
                         </button>
                     </div>
                 </div>
@@ -268,16 +271,7 @@ const Dashboard = () => {
 
 
                             {/* Payment Gateway Monitor Card */}
-                            <div className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition cursor-pointer"
-                                onClick={() => navigate('/payment-gateway')}>
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <h3 className="text-lg font-semibold text-gray-900">💳 Payment Gateway Monitor</h3>
-                                        <p className="text-sm text-gray-600 mt-1">eVirtualPay transaction checker</p>
-                                    </div>
-                                    <div className="text-3xl">→</div>
-                                </div>
-                            </div>
+
                         </div>
 
                         {/* Time Range Selector */}

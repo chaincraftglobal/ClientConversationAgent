@@ -7,7 +7,7 @@ class PaymentGatewayOrchestrator {
     /**
      * Main function - Run complete check
      */
-    async runCheck() {
+    async runCheck(filterType = 'all') {
         const logId = await this.startCheckLog();
 
         try {
@@ -23,10 +23,14 @@ class PaymentGatewayOrchestrator {
             const adminEmail = settings.admin_email;
 
             // Step 1: Login
-            await paymentGatewayScraper.login();
-
+            // Step 1: Login (returns dashboard screenshot path)
+            const dashboardScreenshotPath = await paymentGatewayScraper.login();
             // Step 2: Navigate to transactions
             await paymentGatewayScraper.navigateToTransactions();
+
+            // Step 2.5: Apply date filters
+            await paymentGatewayScraper.applyDateFilters(filterType);
+
 
             // Step 3: Scrape transactions
             const scrapedData = await paymentGatewayScraper.scrapeTransactions();
@@ -76,11 +80,13 @@ class PaymentGatewayOrchestrator {
             // Step 7: Send summary emails to admin
 
             // Send failed transactions summary if any
+            // Send failed transactions summary if any
             if (scrapedData.summary.failed > 0) {
                 await paymentEmailService.sendFailedTransactionsSummary(
                     scrapedData.summary.failed,
                     scrapedData.listScreenshotPath,
-                    adminEmail
+                    adminEmail,
+                    dashboardScreenshotPath  // ✅ ADD THIS
                 );
             }
 

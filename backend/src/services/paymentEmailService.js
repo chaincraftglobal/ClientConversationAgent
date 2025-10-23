@@ -21,7 +21,10 @@ class PaymentEmailService {
     /**
      * Send failed transactions summary to admin
      */
-    async sendFailedTransactionsSummary(failedCount, screenshotPath, adminEmail) {
+    /**
+      * Send failed transactions summary to admin
+      */
+    async sendFailedTransactionsSummary(failedCount, screenshotPath, adminEmail, dashboardScreenshotPath = null) {
         try {
             console.log(`📧 Sending failed transactions summary to ${adminEmail}...`);
 
@@ -56,7 +59,13 @@ class PaymentEmailService {
                                 <p class="count" style="margin: 10px 0;">${failedCount}</p>
                             </div>
                             
-                            <p>Please review the attached screenshot for details and investigate these failed transactions in your payment gateway dashboard.</p>
+                            <p>Please review the attached screenshots for details and investigate these failed transactions in your payment gateway dashboard.</p>
+                            
+                            <p><strong>Attached Screenshots:</strong></p>
+                            <ul>
+                                ${dashboardScreenshotPath ? '<li>Dashboard Screenshot</li>' : ''}
+                                <li>Transactions List Screenshot</li>
+                            </ul>
                             
                             <p><strong>Action Required:</strong></p>
                             <ul>
@@ -76,7 +85,24 @@ class PaymentEmailService {
                 </html>
             `;
 
-            await this.sendEmail(adminEmail, subject, htmlBody, screenshotPath);
+            // Prepare attachments array
+            const attachments = [];
+
+            if (dashboardScreenshotPath) {
+                attachments.push({
+                    filename: 'dashboard.png',
+                    path: dashboardScreenshotPath
+                });
+            }
+
+            if (screenshotPath) {
+                attachments.push({
+                    filename: 'transactions_list.png',
+                    path: screenshotPath
+                });
+            }
+
+            await this.sendEmail(adminEmail, subject, htmlBody, attachments);
 
             console.log('✅ Failed transactions summary email sent');
             return true;
@@ -254,7 +280,10 @@ class PaymentEmailService {
     /**
      * Internal method to send email using first available agent's SMTP
      */
-    async sendEmail(to, subject, htmlBody, attachmentPath = null) {
+    /**
+     * Internal method to send email using first available agent's SMTP
+     */
+    async sendEmail(to, subject, htmlBody, attachments = null) {
         try {
             // Get first active agent to use their SMTP
             const agentResult = await pool.query(
@@ -288,12 +317,18 @@ class PaymentEmailService {
                 html: htmlBody
             };
 
-            // Add attachment if provided
-            if (attachmentPath) {
-                mailOptions.attachments = [{
-                    filename: 'screenshot.png',
-                    path: attachmentPath
-                }];
+            // Add attachments if provided (can be single path string or array of attachment objects)
+            if (attachments) {
+                if (typeof attachments === 'string') {
+                    // Single attachment path (backward compatibility)
+                    mailOptions.attachments = [{
+                        filename: 'screenshot.png',
+                        path: attachments
+                    }];
+                } else if (Array.isArray(attachments)) {
+                    // Array of attachment objects
+                    mailOptions.attachments = attachments;
+                }
             }
 
             // Send email

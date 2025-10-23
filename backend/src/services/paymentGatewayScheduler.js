@@ -90,7 +90,7 @@ class PaymentGatewayScheduler {
     /**
      * Run check manually (outside of schedule)
      */
-    async runManualCheck() {
+    async runManualCheck(filterType = 'all') {
         if (this.isRunning) {
             throw new Error('A check is already running. Please wait for it to complete.');
         }
@@ -98,8 +98,8 @@ class PaymentGatewayScheduler {
         this.isRunning = true;
 
         try {
-            console.log('\n📌 Manual Payment Gateway Check Started\n');
-            const result = await paymentGatewayOrchestrator.runCheck();
+            console.log(`\n📌 Manual Payment Gateway Check Started (Filter: ${filterType})\n`);
+            const result = await paymentGatewayOrchestrator.runCheck(filterType);
             await this.updateLastRunTime();
             return result;
         } finally {

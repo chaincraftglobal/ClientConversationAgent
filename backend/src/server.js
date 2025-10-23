@@ -5,6 +5,7 @@ const { pollAllAgents } = require('./services/emailPollingService');
 const testConnectionRoutes = require('./routes/testConnectionRoutes');
 const paymentGatewayRoutes = require('./routes/paymentGatewayRoutes');
 // Start payment gateway scheduler
+const merchantRoutes = require('./routes/merchantRoutes');  // ✅ ADD THIS
 const paymentGatewayScheduler = require('./services/paymentGatewayScheduler');
 
 require('dotenv').config();
@@ -34,6 +35,7 @@ app.use('/api/assignments', assignmentRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/test-connection', testConnectionRoutes);
 app.use('/api/payment-gateway', paymentGatewayRoutes);
+app.use('/api/merchants', merchantRoutes);  // ✅ ADD THIS
 
 
 // Health check route
@@ -73,5 +75,10 @@ require('./jobs/emailPolling');
 console.log('✅ Email polling cron job started (every 3 minutes)');
 console.log('✅ Email deduplication system initialized');
 
-
 paymentGatewayScheduler.start();
+
+
+// ✅ ADD THIS - Start merchant email scheduler
+const merchantScheduler = require('./services/merchantScheduler');
+merchantScheduler.start();
+console.log('✅ Merchant email monitoring started');

@@ -78,12 +78,31 @@ export const testConnectionAPI = {
 export const paymentGatewayAPI = {
     getCredentials: () => api.get('/payment-gateway/credentials'),
     saveCredentials: (data) => api.post('/payment-gateway/credentials', data),
+    testCredentials: () => api.post('/payment-gateway/test-credentials'),
     getSchedule: () => api.get('/payment-gateway/schedule'),
     updateSchedule: (data) => api.post('/payment-gateway/schedule', data),
-    runManualCheck: () => api.post('/payment-gateway/check-now'),
+    runManualCheck: (filterType = 'all') => api.post('/payment-gateway/check-now', { filterType }), // ✅ UPDATED
     getLogs: () => api.get('/payment-gateway/logs'),
     getTransactions: (params) => api.get('/payment-gateway/transactions', { params }),
     getDashboardSummary: () => api.get('/payment-gateway/dashboard')
+};
+
+export const merchantAPI = {
+    // Accounts
+    getAllAccounts: () => api.get('/merchants/accounts'),
+    addAccount: (data) => api.post('/merchants/accounts', data),
+    testCredentials: (data) => api.post('/merchants/accounts/test', data),  // ✅ ADD THIS
+
+    updateAccount: (id, data) => api.put(`/merchants/accounts/${id}`, data),
+    deleteAccount: (id) => api.delete(`/merchants/accounts/${id}`),
+
+    // Conversations
+    getAllConversations: (params) => api.get('/merchants/conversations', { params }),
+    markAsReplied: (id) => api.post(`/merchants/conversations/${id}/mark-replied`),
+    snoozeReminder: (id, hours) => api.post(`/merchants/conversations/${id}/snooze`, { hours }),
+
+    // Dashboard
+    getDashboard: () => api.get('/merchants/dashboard')
 };
 
 export default api;

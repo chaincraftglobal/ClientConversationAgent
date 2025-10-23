@@ -26,6 +26,11 @@ class PaymentGatewayScraper {
         this.ensureScreenshotDir();
     }
 
+    // Helper to wait (replacement for deprecated waitForTimeout)
+    async wait(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
     async ensureScreenshotDir() {
         try {
             await fs.mkdir(this.screenshotDir, { recursive: true });
@@ -92,14 +97,23 @@ class PaymentGatewayScraper {
             // Click login button (try different selectors)
             await this.clickLoginButton();
 
-            console.log('⏳ Waiting 10 seconds for dashboard to load...');
+            console.log('⏳ Waiting 2 minutes for dashboard to load...');
+            await this.wait(120000);
 
-            // Wait 10 seconds as per requirement
-            await this.page.waitForTimeout(10000);
-
+            // Take dashboard screenshot
+            console.log('📸 Taking dashboard screenshot...');
+            const dashboardScreenshotPath = path.join(
+                this.screenshotDir,
+                `dashboard_${Date.now()}.png`
+            );
+            await this.page.screenshot({
+                path: dashboardScreenshotPath,
+                fullPage: true
+            });
+            console.log(`✅ Dashboard screenshot saved: ${dashboardScreenshotPath}`);
             console.log('✅ Login successful! Dashboard loaded.');
 
-            return true;
+            return dashboardScreenshotPath;  // ✅ Must return the screenshot path
 
         } catch (error) {
             console.error('❌ Login failed:', error.message);
@@ -186,58 +200,33 @@ class PaymentGatewayScraper {
     /**
      * Navigate to transactions page
      */
+    /**
+     * Navigate to transactions page
+     */
     async navigateToTransactions() {
         try {
-            console.log('📊 Navigating to Transactions page...');
+            console.log('📊 Navigating directly to Transactions page URL...');
 
-            // Try to find and click transactions link/button
-            const transactionSelectors = [
-                'a:contains("Transaction")',
-                'a:contains("transaction")',
-                'a[href*="transaction"]',
-                'button:contains("Transaction")',
-                'li:contains("Transaction") a',
-                '.menu-item:contains("Transaction")',
-                '#transactions',
-                '.transactions-link'
-            ];
+            // Navigate directly to transactions page
+            await this.page.goto('https://evirtualpay.com/v2/vp_interface/transactions', {
+                waitUntil: 'networkidle2',
+                timeout: 180000  // 3 minutes timeout
+            });
 
-            let clicked = false;
+            console.log('⏳ Waiting 1 minute before interacting with page...');
+            await this.wait(60000);
 
-            // Try text-based search first
-            const links = await this.page.$$('a');
-            for (const link of links) {
-                const text = await this.page.evaluate(el => el.textContent, link);
-                if (text && text.toLowerCase().includes('transaction')) {
-                    await link.click();
-                    console.log(`✅ Clicked transactions link with text: "${text}"`);
-                    clicked = true;
-                    break;
-                }
-            }
-
-            // If not found, try button
-            if (!clicked) {
-                const buttons = await this.page.$$('button');
-                for (const button of buttons) {
-                    const text = await this.page.evaluate(el => el.textContent, button);
-                    if (text && text.toLowerCase().includes('transaction')) {
-                        await button.click();
-                        console.log(`✅ Clicked transactions button with text: "${text}"`);
-                        clicked = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!clicked) {
-                throw new Error('Could not find Transactions link or button');
-            }
-
-            console.log('⏳ Waiting 30 seconds for transactions page to load...');
-
-            // Wait 30 seconds as per requirement
-            await this.page.waitForTimeout(30000);
+            // Take screenshot of transactions page
+            console.log('📸 Taking transactions page screenshot...');
+            const transactionsScreenshotPath = path.join(
+                this.screenshotDir,
+                `transactions_page_${Date.now()}.png`
+            );
+            await this.page.screenshot({
+                path: transactionsScreenshotPath,
+                fullPage: true
+            });
+            console.log(`✅ Transactions page screenshot saved: ${transactionsScreenshotPath}`);
 
             console.log('✅ Transactions page loaded!');
 
@@ -246,6 +235,151 @@ class PaymentGatewayScraper {
         } catch (error) {
             console.error('❌ Failed to navigate to transactions:', error.message);
             throw error;
+        }
+    }
+
+    /**
+     * Apply date filters on transactions page
+     * @param {string} filterType - 'weekly', 'monthly', or 'all'
+     */
+    /**
+     * Apply date filters on transactions page
+     * @param {string} filterType - 'weekly', 'monthly', or 'all'
+     */
+    async applyDateFilters(filterType = 'all') {
+        try {
+            if (filterType === 'all') {
+                console.log('📊 No date filter applied - showing all transactions');
+                return true;
+            }
+
+            console.log(`📅 Applying ${filterType} date filter...`);
+
+            const today = new Date();
+            let fromDate, toDate;
+
+            if (filterType === 'weekly') {
+                // Last 7 days
+                fromDate = new Date(today);
+                fromDate.setDate(today.getDate() - 7);
+                toDate = new Date(today);
+                console.log(`📅 Weekly filter: ${fromDate.toLocaleDateString()} to ${toDate.toLocaleDateString()}`);
+            } else if (filterType === 'monthly') {
+                // Current month (1st to today)
+                fromDate = new Date(today.getFullYear(), today.getMonth(), 1);
+                toDate = new Date(today);
+                console.log(`📅 Monthly filter: ${fromDate.toLocaleDateString()} to ${toDate.toLocaleDateString()}`);
+            }
+
+            // Format dates as dd/mm/yyyy
+            const formatDate = (date) => {
+                const day = String(date.getDate()).padStart(2, '0');
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const year = date.getFullYear();
+                return `${day}/${month}/${year}`;
+            };
+
+            const fromDateStr = formatDate(fromDate);
+            const toDateStr = formatDate(toDate);
+
+            console.log(`📝 Filling date fields: From ${fromDateStr} to ${toDateStr}`);
+
+            // Wait a bit before interacting
+            await this.wait(5000);
+
+            // Method 1: Try clicking and typing into date fields
+            try {
+                // Get all date input fields
+                const dateInputs = await this.page.$$('input[placeholder*="dd/mm/yyyy"]');
+
+                if (dateInputs.length >= 2) {
+                    console.log(`✅ Found ${dateInputs.length} date input fields`);
+
+                    // Fill From Date (first input)
+                    console.log('📝 Filling From Date field...');
+                    await dateInputs[0].click({ clickCount: 3 }); // Triple click to select all
+                    await this.wait(500);
+                    await dateInputs[0].type(fromDateStr, { delay: 100 });
+                    await this.wait(1000);
+                    console.log(`✅ From Date filled: ${fromDateStr}`);
+
+                    // Fill To Date (second input)
+                    console.log('📝 Filling To Date field...');
+                    await dateInputs[1].click({ clickCount: 3 }); // Triple click to select all
+                    await this.wait(500);
+                    await dateInputs[1].type(toDateStr, { delay: 100 });
+                    await this.wait(1000);
+                    console.log(`✅ To Date filled: ${toDateStr}`);
+
+                    // Take screenshot of filled form
+                    console.log('📸 Taking screenshot of filled date form...');
+                    const filledFormPath = path.join(
+                        this.screenshotDir,
+                        `date_form_filled_${Date.now()}.png`
+                    );
+                    await this.page.screenshot({
+                        path: filledFormPath,
+                        fullPage: false
+                    });
+                    console.log(`✅ Form screenshot saved: ${filledFormPath}`);
+
+                } else {
+                    console.log('⚠️ Could not find 2 date input fields');
+                    return false;
+                }
+            } catch (error) {
+                console.error('❌ Error filling date fields:', error);
+                return false;
+            }
+
+            // Click Filter button
+            console.log('🔍 Looking for Filter button...');
+            await this.wait(2000);
+
+            try {
+                // Try to find and click filter button using evaluate
+                const clicked = await this.page.evaluate(() => {
+                    const buttons = Array.from(document.querySelectorAll('button'));
+                    const filterBtn = buttons.find(btn => btn.textContent.trim() === 'Filter');
+                    if (filterBtn) {
+                        filterBtn.click();
+                        return true;
+                    }
+                    return false;
+                });
+
+                if (clicked) {
+                    console.log('✅ Filter button clicked!');
+                } else {
+                    console.log('⚠️ Could not find or click Filter button');
+                    return false;
+                }
+            } catch (error) {
+                console.error('❌ Error clicking filter button:', error);
+                return false;
+            }
+
+            console.log('⏳ Waiting 3 minutes for filtered results to load...');
+            await this.wait(180000);
+
+            // Take screenshot after filtering
+            console.log('📸 Taking screenshot of filtered results...');
+            const filteredResultsPath = path.join(
+                this.screenshotDir,
+                `filtered_results_${Date.now()}.png`
+            );
+            await this.page.screenshot({
+                path: filteredResultsPath,
+                fullPage: true
+            });
+            console.log(`✅ Filtered results screenshot saved: ${filteredResultsPath}`);
+
+            console.log('✅ Date filter applied successfully!');
+            return true;
+
+        } catch (error) {
+            console.error('❌ Failed to apply date filters:', error.message);
+            return false;
         }
     }
 
@@ -411,7 +545,7 @@ class PaymentGatewayScraper {
             console.log('✅ Action button clicked, waiting for popup...');
 
             // Wait for popup/modal to appear
-            await this.page.waitForTimeout(2000);
+            await this.wait(2000);
 
             // Extract details from popup
             const details = await this.page.evaluate(() => {
@@ -511,7 +645,7 @@ class PaymentGatewayScraper {
 
             // If close button not found, press Escape
             await this.page.keyboard.press('Escape');
-            await this.page.waitForTimeout(1000);
+            await this.wait(1000);
 
             console.log('✅ Transaction details extracted');
 
@@ -547,7 +681,7 @@ class PaymentGatewayScraper {
             }
 
             // Small delay between transactions
-            await this.page.waitForTimeout(1000);
+            await this.wait(1000);
         }
 
         return successDetails;

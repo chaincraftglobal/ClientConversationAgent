@@ -252,9 +252,10 @@ const getReplyStatusByAssignment = async (req, res) => {
         });
     }
 };
-
 module.exports = {
     sendMessage,
     getMessagesByAssignment,
-    getMessageById
+    getMessageById,
+    getPendingReplies,              // ✅ ADD THIS
+    getReplyStatusByAssignment      // ✅ ADD THIS
 };

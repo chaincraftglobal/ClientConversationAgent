@@ -9,6 +9,8 @@ const PaymentGatewaySettings = () => {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [checking, setChecking] = useState(false);
+    const [testing, setTesting] = useState(false);  // ✅ ADD THIS
+
 
     const [credentials, setCredentials] = useState({
         login_url: 'https://evirtualpay.com/v2/vp_interface/login',
@@ -71,6 +73,19 @@ const PaymentGatewaySettings = () => {
         }
     };
 
+    const handleTestCredentials = async () => {
+        setTesting(true);
+        try {
+            const response = await paymentGatewayAPI.testCredentials();
+            alert(response.data.message);
+        } catch (error) {
+            console.error('Test failed:', error);
+            alert(error.response?.data?.message || '❌ Test failed');
+        } finally {
+            setTesting(false);
+        }
+    };
+
     const handleSaveSchedule = async (e) => {
         e.preventDefault();
         setSaving(true);
@@ -87,20 +102,43 @@ const PaymentGatewaySettings = () => {
         }
     };
 
-    const handleRunManualCheck = async () => {
-        if (!window.confirm('Run payment gateway check now? This may take 1-2 minutes.')) {
+    const handleRunManualCheck = async (filterType = 'all') => {
+        const filterNames = {
+            'all': 'all transactions',
+            'weekly': 'this week\'s transactions',
+            'monthly': 'this month\'s transactions'
+        };
+
+        if (!window.confirm(`Run payment gateway check for ${filterNames[filterType]}? This may take 5-6 minutes.`)) {
             return;
         }
 
         setChecking(true);
 
         try {
-            const response = await paymentGatewayAPI.runManualCheck();
-            alert(`✅ Check completed!\n\nTotal: ${response.data.data.summary.total}\nSuccess: ${response.data.data.summary.success}\nFailed: ${response.data.data.summary.failed}`);
-            await fetchData();
+            const response = await paymentGatewayAPI.runManualCheck(filterType);
+
+            // Check if we have valid data
+            if (response.data.success && response.data.data) {
+                const data = response.data.data;
+                const summary = data.summary || {};
+
+                alert(`✅ Check completed (${filterNames[filterType]})!
+
+Total Transactions: ${summary.total || 0}
+✅ Success: ${summary.success || 0}
+❌ Failed: ${summary.failed || 0}
+🆕 New Transactions: ${data.newTransactions || 0}
+📧 Thank You Emails Sent: ${data.thankYouEmailsSent || 0}`);
+
+                await fetchData(); // Refresh dashboard
+            } else {
+                alert(`✅ Check completed but no transactions found for ${filterNames[filterType]}.`);
+            }
         } catch (error) {
             console.error('Error running check:', error);
-            alert('❌ Check failed: ' + (error.response?.data?.message || error.message));
+            const errorMsg = error.response?.data?.message || error.message || 'Unknown error';
+            alert('❌ Check failed: ' + errorMsg);
         } finally {
             setChecking(false);
         }
@@ -274,6 +312,21 @@ const PaymentGatewaySettings = () => {
                         >
                             {saving ? 'Saving...' : 'Save Credentials'}
                         </button>
+                        <button
+                            type="button"
+                            onClick={handleTestCredentials}
+                            disabled={testing}
+                            className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+                        >
+                            {testing ? (
+                                <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                    Testing...
+                                </>
+                            ) : (
+                                '🧪 Test Connection'
+                            )}
+                        </button>
                     </form>
                 </div>
 
@@ -286,9 +339,10 @@ const PaymentGatewaySettings = () => {
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Check Interval</label>
                                 <select
                                     value={schedule.check_interval_hours}
-                                    onChange={(e) => setSchedule({ ...schedule, check_interval_hours: parseInt(e.target.value) })}
+                                    onChange={(e) => setSchedule({ ...schedule, check_interval_hours: parseFloat(e.target.value) })}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                 >
+                                    <option value={0.05}>Every 3 minutes (Testing)</option>
                                     <option value={3}>Every 3 hours</option>
                                     <option value={4}>Every 4 hours</option>
                                     <option value={5}>Every 5 hours</option>
@@ -333,9 +387,9 @@ const PaymentGatewaySettings = () => {
                             </button>
                             <button
                                 type="button"
-                                onClick={handleRunManualCheck}
+                                onClick={() => handleRunManualCheck('weekly')}
                                 disabled={checking}
-                                className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+                                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
                             >
                                 {checking ? (
                                     <>
@@ -343,7 +397,37 @@ const PaymentGatewaySettings = () => {
                                         Checking...
                                     </>
                                 ) : (
-                                    '▶️ Run Check Now'
+                                    '📅 Weekly Report'
+                                )}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleRunManualCheck('monthly')}
+                                disabled={checking}
+                                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {checking ? (
+                                    <>
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                        Checking...
+                                    </>
+                                ) : (
+                                    '📆 Monthly Report'
+                                )}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleRunManualCheck('all')}
+                                disabled={checking}
+                                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {checking ? (
+                                    <>
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                        Checking...
+                                    </>
+                                ) : (
+                                    '🌍 All Time'
                                 )}
                             </button>
                         </div>

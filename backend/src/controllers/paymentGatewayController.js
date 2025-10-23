@@ -84,6 +84,35 @@ const paymentGatewayController = {
         }
     },
 
+    // Test credentials (just login, don't scrape)
+    testCredentials: async (req, res) => {
+        const paymentGatewayScraper = require('../services/paymentGatewayScraper');
+
+        try {
+            console.log('🧪 Testing payment gateway credentials...');
+
+            await paymentGatewayScraper.login();
+            await paymentGatewayScraper.close();
+
+            res.json({
+                success: true,
+                message: '✅ Login successful! Credentials are working.'
+            });
+        } catch (error) {
+            console.error('❌ Credential test failed:', error);
+
+            // Close browser on error
+            try {
+                await paymentGatewayScraper.close();
+            } catch (e) { }
+
+            res.status(400).json({
+                success: false,
+                message: '❌ Login failed: ' + error.message
+            });
+        }
+    },
+
     // Get schedule settings
     getSchedule: async (req, res) => {
         try {
@@ -147,9 +176,11 @@ const paymentGatewayController = {
     },
 
     // Manual check
+    // Manual check
     runManualCheck: async (req, res) => {
         try {
-            const result = await paymentGatewayScheduler.runManualCheck();
+            const { filterType } = req.body; // Get filterType from request body
+            const result = await paymentGatewayScheduler.runManualCheck(filterType || 'all');
 
             res.json({
                 success: true,
@@ -164,7 +195,6 @@ const paymentGatewayController = {
             });
         }
     },
-
     // Get check logs
     getCheckLogs: async (req, res) => {
         try {
@@ -267,4 +297,14 @@ const paymentGatewayController = {
     }
 };
 
-module.exports = paymentGatewayController;
+module.exports = {
+    getCredentials: paymentGatewayController.getCredentials,
+    saveCredentials: paymentGatewayController.saveCredentials,
+    testCredentials: paymentGatewayController.testCredentials,  // ✅ ADDED
+    getSchedule: paymentGatewayController.getSchedule,
+    updateSchedule: paymentGatewayController.updateSchedule,
+    runManualCheck: paymentGatewayController.runManualCheck,
+    getCheckLogs: paymentGatewayController.getCheckLogs,
+    getTransactions: paymentGatewayController.getTransactions,
+    getDashboardSummary: paymentGatewayController.getDashboardSummary
+};
