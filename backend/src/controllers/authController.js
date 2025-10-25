@@ -109,11 +109,11 @@ const login = async (req, res) => {
         }
 
         // Generate JWT token
-        //   const token = jwt.sign(
-        //      { id: user.id, email: user.email },
-        //      process.env.JWT_SECRET,
-        //      { expiresIn: process.env.JWT_EXPIRES_IN }
-        //  );
+        const token = jwt.sign(
+            { id: user.id, email: user.email },
+            process.env.JWT_SECRET,
+            { expiresIn: '24h' }  // ✅ CORRECT
+        );
 
         res.status(200).json({
             success: true,
