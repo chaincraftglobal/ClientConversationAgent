@@ -7,7 +7,7 @@ const paymentGatewayRoutes = require('./routes/paymentGatewayRoutes');
 // Start payment gateway scheduler
 const merchantRoutes = require('./routes/merchantRoutes');  // ✅ ADD THIS
 const paymentGatewayScheduler = require('./services/paymentGatewayScheduler');
-
+const welcomeEmailScheduler = require('./services/welcomeEmailScheduler');
 require('dotenv').config();
 
 const authRoutes = require('./routes/authRoutes');
@@ -88,9 +88,15 @@ console.log('✅ Email polling cron job started (every 3 minutes)');
 console.log('✅ Email deduplication system initialized');
 
 paymentGatewayScheduler.start();
-
+// Start Welcome Email Scheduler
+welcomeEmailScheduler.start();
 
 // ✅ ADD THIS - Start merchant email scheduler
 const merchantScheduler = require('./services/merchantScheduler');
 merchantScheduler.start();
 console.log('✅ Merchant email monitoring started');
+
+
+// Welcome Email routes
+const welcomeEmailRoutes = require('./routes/welcomeEmailRoutes');
+app.use('/api/welcome-emails', welcomeEmailRoutes);
