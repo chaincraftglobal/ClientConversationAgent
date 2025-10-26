@@ -16,6 +16,8 @@ import AddMerchantAccount from './pages/AddMerchantAccount';
 
 import ViewMerchantAccount from './pages/ViewMerchantAccount';
 import EditMerchantAccount from './pages/EditMerchantAccount';
+import WelcomeEmailDashboard from './pages/WelcomeEmailDashboard';
+import WelcomeEmailSettings from './pages/WelcomeEmailSettings';
 
 
 // Protected Route Component
@@ -153,6 +155,10 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+
+      <Route path="/welcome-emails" element={<ProtectedRoute><WelcomeEmailDashboard /></ProtectedRoute>} />
+      <Route path="/welcome-emails/settings" element={<ProtectedRoute><WelcomeEmailSettings /></ProtectedRoute>} />
 
       <Route path="/" element={<Navigate to="/dashboard" />} />
       <Route path="*" element={<Navigate to="/dashboard" />} />

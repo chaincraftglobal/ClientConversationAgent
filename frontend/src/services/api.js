@@ -40,6 +40,16 @@ export const agentAPI = {
     delete: (id) => api.delete(`/agents/${id}`)
 };
 
+export const welcomeEmailAPI = {
+    getConfig: () => api.get('/welcome-emails/config'),
+    updateConfig: (data) => api.put('/welcome-emails/config', data),
+    getLogs: (params) => api.get('/welcome-emails/logs', { params }),
+    getStats: () => api.get('/welcome-emails/stats'),
+    testEmail: (email) => api.post('/welcome-emails/test', { email }),
+    runNow: () => api.post('/welcome-emails/run-now'),
+    getSchedulerStatus: () => api.get('/welcome-emails/scheduler-status')
+};
+
 // Client APIs
 export const clientAPI = {
     getAll: () => api.get('/clients'),

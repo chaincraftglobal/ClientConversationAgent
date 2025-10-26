@@ -198,6 +198,10 @@ const Dashboard = () => {
                         <button onClick={() => navigate('/merchants')} className="text-gray-600 hover:text-gray-900">
                             📧 Merchant Manager
                         </button>
+
+                        <button onClick={() => navigate('/welcome-emails')}>
+                            📧 Welcome Emails
+                        </button>
                     </div>
                 </div>
             </nav>
