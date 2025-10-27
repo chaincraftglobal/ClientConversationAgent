@@ -290,9 +290,26 @@ const testSMTPConnection = async (req, res) => {
 
     } catch (error) {
         console.error('❌ SMTP connection failed:', error);
+
+        // Build detailed error message
+        let errorMessage = error.message;
+
+        if (error.code === 'ETIMEDOUT') {
+            errorMessage = `Connection timeout. Port ${smtp_port} may be blocked by Railway or your email provider.`;
+        } else if (error.code === 'ECONNREFUSED') {
+            errorMessage = `Connection refused. Check host and port settings.`;
+        } else if (error.code === 'EAUTH') {
+            errorMessage = `Authentication failed. Check email and password.`;
+        }
+
+        // Add technical details
+        if (error.code) {
+            errorMessage += ` (Error code: ${error.code})`;
+        }
+
         res.status(500).json({
             success: false,
-            message: 'SMTP connection failed: ' + error.message
+            message: errorMessage
         });
     }
 };

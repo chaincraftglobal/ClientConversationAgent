@@ -226,15 +226,20 @@ const WelcomeEmailSettings = () => {
                     </div>
 
                     <div className="form-group">
-                        <label className="toggle-label">
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
                             <input
                                 type="checkbox"
                                 checked={config?.smtp_secure !== false}
                                 onChange={(e) => setConfig({ ...config, smtp_secure: e.target.checked })}
+                                style={{
+                                    width: '20px',
+                                    height: '20px',
+                                    cursor: 'pointer',
+                                    accentColor: '#28a745'
+                                }}
                             />
-                            <span className="toggle-slider"></span>
-                            <span className="toggle-text">
-                                Use SSL/TLS Encryption
+                            <span style={{ fontWeight: 600, fontSize: '16px' }}>
+                                Use SSL/TLS Encryption {config?.smtp_secure !== false ? '✅' : '❌'}
                             </span>
                         </label>
                         <p className="help-text">
