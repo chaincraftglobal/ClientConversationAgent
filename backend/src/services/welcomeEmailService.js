@@ -88,13 +88,25 @@ class WelcomeEmailService {
             console.log(`📧 Sending welcome email to ${transaction.customer_email}...`);
 
             // Create SMTP transporter
+            // Get SMTP config from database
+            const smtpHost = config.smtp_host || process.env.SMTP_HOST || 'smtp.hostinger.com';
+            const smtpPort = config.smtp_port || parseInt(process.env.SMTP_PORT) || 465;
+            const smtpUser = config.smtp_user || process.env.SMTP_USER;
+            const smtpPassword = config.smtp_password || process.env.SMTP_PASSWORD;
+            const smtpSecure = config.smtp_secure !== undefined ? config.smtp_secure : (smtpPort === 465);
+
+            if (!smtpUser || !smtpPassword) {
+                throw new Error('SMTP credentials not configured. Please configure in Settings.');
+            }
+
+            // Create SMTP transporter
             const transporter = nodemailer.createTransport({
-                host: process.env.SMTP_HOST || 'smtp.hostinger.com',
-                port: parseInt(process.env.SMTP_PORT) || 587,
-                secure: process.env.SMTP_PORT === '465',
+                host: smtpHost,
+                port: smtpPort,
+                secure: smtpSecure,
                 auth: {
-                    user: process.env.SMTP_USER || 'sales@lacewingtech.in',
-                    pass: process.env.SMTP_PASSWORD
+                    user: smtpUser,
+                    pass: smtpPassword
                 }
             });
 

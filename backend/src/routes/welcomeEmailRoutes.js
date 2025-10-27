@@ -20,6 +20,7 @@ router.get('/stats', welcomeEmailController.getStats);
 router.post('/test', welcomeEmailController.testEmail);
 router.post('/run-now', welcomeEmailController.runNow);
 
+router.post('/test-smtp', welcomeEmailController.testSMTPConnection);
 // Scheduler status
 router.get('/scheduler-status', welcomeEmailController.getSchedulerStatus);
 

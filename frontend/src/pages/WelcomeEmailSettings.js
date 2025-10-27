@@ -10,6 +10,8 @@ const WelcomeEmailSettings = () => {
     const [saving, setSaving] = useState(false);
     const [testEmail, setTestEmail] = useState('');
     const [sendingTest, setSendingTest] = useState(false);
+    const [testingSmtp, setTestingSmtp] = useState(false);
+    const [smtpTestResult, setSmtpTestResult] = useState(null);
 
     useEffect(() => {
         loadConfig();
@@ -30,17 +32,54 @@ const WelcomeEmailSettings = () => {
     const handleSave = async (e) => {
         e.preventDefault();
 
+        if (!config.smtp_host || !config.smtp_port || !config.smtp_user || !config.smtp_password) {
+            alert('Please fill in all SMTP fields (Host, Port, Email, Password)');
+            return;
+        }
+
         if (!window.confirm('Save configuration changes?')) return;
 
         setSaving(true);
         try {
             await welcomeEmailAPI.updateConfig(config);
-            alert('Configuration saved successfully!');
+            alert('Configuration saved successfully! ✅');
         } catch (error) {
             console.error('Error saving config:', error);
-            alert('Error saving configuration');
+            alert('Error saving configuration: ' + error.message);
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleTestSMTP = async () => {
+        if (!config.smtp_host || !config.smtp_port || !config.smtp_user || !config.smtp_password) {
+            alert('Please fill in all SMTP fields first (Host, Port, Email, Password)');
+            return;
+        }
+
+        setTestingSmtp(true);
+        setSmtpTestResult(null);
+
+        try {
+            const response = await welcomeEmailAPI.testSMTPConnection({
+                smtp_host: config.smtp_host,
+                smtp_port: config.smtp_port,
+                smtp_user: config.smtp_user,
+                smtp_password: config.smtp_password,
+                smtp_secure: config.smtp_secure
+            });
+
+            setSmtpTestResult({
+                success: true,
+                message: response.data.message
+            });
+        } catch (error) {
+            setSmtpTestResult({
+                success: false,
+                message: error.response?.data?.message || error.message
+            });
+        } finally {
+            setTestingSmtp(false);
         }
     };
 
@@ -55,7 +94,7 @@ const WelcomeEmailSettings = () => {
         setSendingTest(true);
         try {
             await welcomeEmailAPI.testEmail(testEmail);
-            alert('Test email sent successfully! Check your inbox.');
+            alert('Test email sent successfully! Check your inbox. ✅');
             setTestEmail('');
         } catch (error) {
             console.error('Error sending test email:', error);
@@ -125,9 +164,110 @@ const WelcomeEmailSettings = () => {
                     </div>
                 </div>
 
+                {/* SMTP Configuration - EDITABLE */}
+                <div className="settings-section">
+                    <h2>🔧 SMTP Configuration</h2>
+                    <p className="help-text" style={{ marginBottom: '20px' }}>
+                        Configure your email server settings. Required for sending welcome emails.
+                    </p>
+
+                    <div className="smtp-config-grid">
+                        <div className="form-group">
+                            <label>SMTP Host *</label>
+                            <input
+                                type="text"
+                                value={config?.smtp_host || ''}
+                                onChange={(e) => setConfig({ ...config, smtp_host: e.target.value })}
+                                className="form-input"
+                                placeholder="smtp.hostinger.com"
+                                required
+                            />
+                            <p className="help-text">Your email provider's SMTP server address</p>
+                        </div>
+
+                        <div className="form-group">
+                            <label>SMTP Port *</label>
+                            <input
+                                type="number"
+                                value={config?.smtp_port || 465}
+                                onChange={(e) => setConfig({ ...config, smtp_port: parseInt(e.target.value) })}
+                                className="form-input"
+                                placeholder="465"
+                                required
+                            />
+                            <p className="help-text">Common: 465 (SSL) or 587 (TLS)</p>
+                        </div>
+
+                        <div className="form-group">
+                            <label>SMTP Email *</label>
+                            <input
+                                type="email"
+                                value={config?.smtp_user || ''}
+                                onChange={(e) => setConfig({ ...config, smtp_user: e.target.value })}
+                                className="form-input"
+                                placeholder="support@lacewingtech.in"
+                                required
+                            />
+                            <p className="help-text">Email address used to send</p>
+                        </div>
+
+                        <div className="form-group">
+                            <label>SMTP Password *</label>
+                            <input
+                                type="password"
+                                value={config?.smtp_password || ''}
+                                onChange={(e) => setConfig({ ...config, smtp_password: e.target.value })}
+                                className="form-input"
+                                placeholder="••••••••"
+                                required
+                            />
+                            <p className="help-text">Email account password</p>
+                        </div>
+                    </div>
+
+                    <div className="form-group">
+                        <label className="toggle-label">
+                            <input
+                                type="checkbox"
+                                checked={config?.smtp_secure !== false}
+                                onChange={(e) => setConfig({ ...config, smtp_secure: e.target.checked })}
+                            />
+                            <span className="toggle-slider"></span>
+                            <span className="toggle-text">
+                                Use SSL/TLS Encryption
+                            </span>
+                        </label>
+                        <p className="help-text">
+                            Recommended: ON for port 465 (SSL), OFF for port 587 (TLS)
+                        </p>
+                    </div>
+
+                    {/* SMTP Test Section */}
+                    <div className="smtp-test-section">
+                        <h4>🔌 Test SMTP Connection</h4>
+                        <p style={{ margin: '0 0 15px 0', fontSize: '14px', color: '#856404' }}>
+                            Test your SMTP settings before saving to ensure they work correctly
+                        </p>
+                        <button
+                            type="button"
+                            onClick={handleTestSMTP}
+                            disabled={testingSmtp}
+                            className="btn-test-smtp"
+                        >
+                            {testingSmtp ? '🔄 Testing Connection...' : '🔌 Test SMTP Connection'}
+                        </button>
+
+                        {smtpTestResult && (
+                            <div className={`test-result ${smtpTestResult.success ? 'success' : 'error'}`}>
+                                {smtpTestResult.success ? '✅' : '❌'} {smtpTestResult.message}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
                 {/* Email Configuration */}
                 <div className="settings-section">
-                    <h2>Email Configuration</h2>
+                    <h2>📧 Email Template Configuration</h2>
 
                     <div className="form-group">
                         <label>Email Subject</label>
@@ -153,14 +293,14 @@ const WelcomeEmailSettings = () => {
                         </div>
 
                         <div className="form-group">
-                            <label>From Email (Read-only)</label>
+                            <label>From Email (Auto-filled from SMTP)</label>
                             <input
                                 type="email"
-                                value={config?.from_email || 'sales@lacewingtech.in'}
+                                value={config?.smtp_user || config?.from_email || ''}
                                 className="form-input"
                                 disabled
                             />
-                            <p className="help-text">Configured via environment variables</p>
+                            <p className="help-text">Uses SMTP email configured above</p>
                         </div>
                     </div>
 
@@ -177,39 +317,18 @@ const WelcomeEmailSettings = () => {
                     </div>
                 </div>
 
-                {/* SMTP Info (Read-only) */}
-                <div className="settings-section">
-                    <h2>SMTP Configuration (Read-only)</h2>
-                    <div className="info-grid">
-                        <div className="info-item">
-                            <span className="info-label">Host:</span>
-                            <span className="info-value">smtp.hostinger.com</span>
-                        </div>
-                        <div className="info-item">
-                            <span className="info-label">Port:</span>
-                            <span className="info-value">587</span>
-                        </div>
-                        <div className="info-item">
-                            <span className="info-label">Email:</span>
-                            <span className="info-value">sales@lacewingtech.in</span>
-                        </div>
-                        <div className="info-item">
-                            <span className="info-label">Security:</span>
-                            <span className="info-value">TLS</span>
-                        </div>
-                    </div>
-                    <p className="help-text">SMTP credentials are managed via environment variables in Railway</p>
-                </div>
-
                 {/* Test Email */}
                 <div className="settings-section">
-                    <h2>Test Email</h2>
+                    <h2>📤 Send Test Welcome Email</h2>
+                    <p className="help-text" style={{ marginBottom: '15px' }}>
+                        Send a sample welcome email to test the complete system (SMTP + Template)
+                    </p>
                     <div className="test-email-group">
                         <input
                             type="email"
                             value={testEmail}
                             onChange={(e) => setTestEmail(e.target.value)}
-                            placeholder="Enter email to send test"
+                            placeholder="Enter email to receive test"
                             className="form-input"
                         />
                         <button
@@ -221,7 +340,6 @@ const WelcomeEmailSettings = () => {
                             {sendingTest ? '📤 Sending...' : '📧 Send Test Email'}
                         </button>
                     </div>
-                    <p className="help-text">Send a test welcome email to verify configuration</p>
                 </div>
 
                 {/* Save Button */}

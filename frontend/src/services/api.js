@@ -46,6 +46,7 @@ export const welcomeEmailAPI = {
     getLogs: (params) => api.get('/welcome-emails/logs', { params }),
     getStats: () => api.get('/welcome-emails/stats'),
     testEmail: (email) => api.post('/welcome-emails/test', { email }),
+    testSMTPConnection: (data) => api.post('/welcome-emails/test-smtp', data),  // ✅ ADD THIS
     runNow: () => api.post('/welcome-emails/run-now'),
     getSchedulerStatus: () => api.get('/welcome-emails/scheduler-status')
 };

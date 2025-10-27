@@ -252,6 +252,51 @@ const getSchedulerStatus = async (req, res) => {
     }
 };
 
+// Test SMTP connection
+const testSMTPConnection = async (req, res) => {
+    try {
+        const { smtp_host, smtp_port, smtp_user, smtp_password, smtp_secure } = req.body;
+
+        if (!smtp_host || !smtp_port || !smtp_user || !smtp_password) {
+            return res.status(400).json({
+                success: false,
+                message: 'All SMTP fields are required'
+            });
+        }
+
+        console.log(`🔧 Testing SMTP connection: ${smtp_user}@${smtp_host}:${smtp_port}`);
+
+        const nodemailer = require('nodemailer');
+
+        const transporter = nodemailer.createTransport({
+            host: smtp_host,
+            port: parseInt(smtp_port),
+            secure: smtp_secure === true || smtp_port === 465,
+            auth: {
+                user: smtp_user,
+                pass: smtp_password
+            }
+        });
+
+        // Verify connection
+        await transporter.verify();
+
+        console.log('✅ SMTP connection successful');
+
+        res.status(200).json({
+            success: true,
+            message: 'SMTP connection successful! ✅'
+        });
+
+    } catch (error) {
+        console.error('❌ SMTP connection failed:', error);
+        res.status(500).json({
+            success: false,
+            message: 'SMTP connection failed: ' + error.message
+        });
+    }
+};
+
 module.exports = {
     getConfig,
     updateConfig,
@@ -259,5 +304,6 @@ module.exports = {
     getStats,
     testEmail,
     runNow,
-    getSchedulerStatus
+    getSchedulerStatus,
+    testSMTPConnection  // ✅ ADD THIS
 };
