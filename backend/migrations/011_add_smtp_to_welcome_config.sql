@@ -1,6 +1,6 @@
 -- Add SMTP configuration fields to welcome_email_config
 ALTER TABLE welcome_email_config
-ADD COLUMN IF NOT EXISTS smtp_host VARCHAR(255) DEFAULT 'smtp.hostinger.com',
+ADD COLUMN IF NOT EXISTS smtp_host VARCHAR(255) DEFAULT 'smtpout.secureserver.net',
 ADD COLUMN IF NOT EXISTS smtp_port INTEGER DEFAULT 465,
 ADD COLUMN IF NOT EXISTS smtp_user VARCHAR(255),
 ADD COLUMN IF NOT EXISTS smtp_password TEXT,
