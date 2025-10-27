@@ -295,7 +295,7 @@ const testSMTPConnection = async (req, res) => {
         let errorMessage = error.message;
 
         if (error.code === 'ETIMEDOUT') {
-            errorMessage = `Connection timeout. Port ${smtp_port} may be blocked by Railway or your email provider.`;
+            errorMessage = `Connection timeout. Port ${req.body.smtp_port} may be blocked by Railway or your email provider.`;
         } else if (error.code === 'ECONNREFUSED') {
             errorMessage = `Connection refused. Check host and port settings.`;
         } else if (error.code === 'EAUTH') {
