@@ -1,5 +1,5 @@
 const pool = require('../config/database');
-const nodemailer = require('nodemailer');
+const sendgridHelper = require('../utils/sendgridHelper');
 const crypto = require('crypto');
 
 // Encryption
@@ -97,18 +97,6 @@ class MerchantReminderService {
                 return;
             }
 
-            const decryptedPassword = decrypt(reminder.email_password_encrypted);
-
-            const transporter = nodemailer.createTransport({
-                host: reminder.smtp_host || 'smtp.gmail.com',
-                port: reminder.smtp_port || 587,
-                secure: reminder.smtp_port === 465,
-                auth: {
-                    user: reminder.merchant_email,
-                    pass: decryptedPassword
-                }
-            });
-
             const htmlBody = `
                 <!DOCTYPE html>
                 <html>
@@ -147,9 +135,13 @@ class MerchantReminderService {
                 </html>
             `;
 
-            await transporter.sendMail({
-                from: reminder.merchant_email,
+            // Send via SendGrid instead of SMTP (Railway blocks SMTP)
+            await sendgridHelper.sendEmail({
                 to: reminder.notification_email,
+                from: {
+                    email: reminder.merchant_email,
+                    name: reminder.merchant_name
+                },
                 subject: `⏰ REMINDER: Reply needed for ${reminder.merchant_name}`,
                 html: htmlBody
             });
@@ -160,7 +152,7 @@ class MerchantReminderService {
                 [reminder.id]
             );
 
-            console.log('✅ [REMINDER] Reply reminder sent successfully');
+            console.log('✅ [REMINDER] Reply reminder sent successfully via SendGrid');
 
         } catch (error) {
             console.error('❌ [REMINDER] Error sending reply reminder:', error);
@@ -196,18 +188,6 @@ class MerchantReminderService {
                 return;
             }
 
-            const decryptedPassword = decrypt(reminder.email_password_encrypted);
-
-            const transporter = nodemailer.createTransport({
-                host: reminder.smtp_host || 'smtp.gmail.com',
-                port: reminder.smtp_port || 587,
-                secure: reminder.smtp_port === 465,
-                auth: {
-                    user: reminder.merchant_email,
-                    pass: decryptedPassword
-                }
-            });
-
             const followUpText = `Hi,
 
 I hope this email finds you well. I wanted to follow up on my previous email regarding the payment gateway application.
@@ -218,11 +198,15 @@ Looking forward to hearing from you.
 
 Best regards`;
 
-            await transporter.sendMail({
-                from: reminder.merchant_email,
+            // Send via SendGrid instead of SMTP (Railway blocks SMTP)
+            await sendgridHelper.sendEmail({
                 to: reminder.from_email,
+                from: {
+                    email: reminder.merchant_email,
+                    name: reminder.merchant_name
+                },
                 subject: `Re: ${reminder.subject}`,
-                text: followUpText
+                html: followUpText.replace(/\n/g, '<br>')
             });
 
             // Mark as sent
@@ -237,7 +221,7 @@ Best regards`;
                 [reminder.conversation_id]
             );
 
-            console.log('✅ [REMINDER] Auto follow-up sent successfully');
+            console.log('✅ [REMINDER] Auto follow-up sent successfully via SendGrid');
 
         } catch (error) {
             console.error('❌ [REMINDER] Error sending follow-up:', error);
