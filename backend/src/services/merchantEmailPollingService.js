@@ -2,7 +2,13 @@ const Imap = require('imap');
 const { simpleParser } = require('mailparser');
 const pool = require('../config/database');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
+const sendgridHelper = require('../utils/sendgridHelper');
+const OpenAI = require('openai');
+
+// Initialize OpenAI
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+});
 
 // Encryption
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '12345678901234567890123456789012';
@@ -18,9 +24,82 @@ const decrypt = (text) => {
     return decrypted.toString();
 };
 
+// Payment Gateway Domains to Monitor
+const PAYMENT_GATEWAY_DOMAINS = [
+    'fiserv.com',
+    'payu.in',
+    'payu.com',
+    'razorpay.com',
+    'cashfree.com',
+    'paytm.com',
+    'virtualpay.com',
+    'evirtualpay.com',
+    'stripe.com',
+    'phonepe.com',
+    'ccavenue.com',
+    'instamojo.com',
+    'billdesk.com',
+    'paypal.com',
+    'amazonpay.in'
+];
+
 // Global processing lock
 const processingMessages = new Set();
 let isPolling = false;
+
+/**
+ * Check if email is from payment gateway domain
+ */
+const isPaymentGatewayEmail = (fromEmail) => {
+    const emailLower = fromEmail.toLowerCase();
+    return PAYMENT_GATEWAY_DOMAINS.some(domain => emailLower.includes(`@${domain}`));
+};
+
+/**
+ * Use AI to determine if email is important (not promotional)
+ */
+const isImportantEmail = async (subject, bodyText) => {
+    try {
+        const prompt = `Analyze this email and determine if it's IMPORTANT for a payment gateway application or just promotional/spam.
+
+Email Subject: ${subject}
+Email Content: ${bodyText.substring(0, 1000)}
+
+IMPORTANT emails include:
+- Application status updates
+- Document/KYC requests
+- Account approval/rejection
+- Integration instructions
+- Follow-up on application
+- Verification needed
+- Important notifications
+
+SKIP (promotional) emails include:
+- Marketing offers
+- Product announcements
+- Newsletters
+- General updates
+- Promotional content
+- Event invitations
+
+Respond with ONLY one word: "IMPORTANT" or "SKIP"`;
+
+        const response = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [{ role: "user", content: prompt }],
+            max_tokens: 10,
+            temperature: 0.3
+        });
+
+        const result = response.choices[0].message.content.trim().toUpperCase();
+        return result === 'IMPORTANT';
+
+    } catch (error) {
+        console.error('❌ [AI] Error analyzing email:', error.message);
+        // If AI fails, allow email through (fail-safe)
+        return true;
+    }
+};
 
 // Poll inbox for a specific merchant account
 const pollMerchantInbox = async (merchantId) => {
@@ -75,12 +154,12 @@ const pollMerchantInbox = async (merchantId) => {
 
                         console.log(`📬 [MERCHANT] Found ${results.length} new email(s) for merchant ${merchantId}`);
 
-                        const fetch = imap.fetch(results, { bodies: '', markSeen: true });
+                        const fetch = imap.fetch(results, { bodies: '', markSeen: false }); // Don't mark as seen yet
                         const emails = [];
                         let parseCount = 0;
                         let messageCount = 0;
 
-                        fetch.on('message', (msg) => {
+                        fetch.on('message', (msg, seqno) => {
                             messageCount++;
                             msg.on('body', (stream) => {
                                 simpleParser(stream, async (err, parsed) => {
@@ -89,11 +168,11 @@ const pollMerchantInbox = async (merchantId) => {
                                         parseCount++;
                                         return;
                                     }
-                                    emails.push(parsed);
+                                    emails.push({ parsed, seqno });
                                     parseCount++;
 
                                     if (parseCount === messageCount) {
-                                        await processEmailBatch(merchant, emails);
+                                        await processEmailBatch(merchant, emails, imap);
                                         imap.end();
                                         resolve({ newEmails: emails.length });
                                     }
@@ -129,34 +208,60 @@ const pollMerchantInbox = async (merchantId) => {
 };
 
 // Process batch of emails
-const processEmailBatch = async (merchant, emails) => {
+const processEmailBatch = async (merchant, emails, imap) => {
     for (const email of emails) {
         try {
-            await processIncomingEmail(merchant, email);
+            const shouldKeep = await processIncomingEmail(merchant, email.parsed);
+            
+            // Mark as seen only if we're keeping it (important)
+            if (shouldKeep) {
+                imap.addFlags(email.seqno, ['\\Seen'], (err) => {
+                    if (err) console.error('Error marking as seen:', err);
+                });
+            }
         } catch (error) {
             console.error('❌ [MERCHANT] Error processing email:', error);
         }
     }
 };
 
-// Process incoming email
+// Process incoming email with smart filtering
 const processIncomingEmail = async (merchant, parsedEmail) => {
     const messageId = parsedEmail.messageId;
 
     try {
         if (processingMessages.has(messageId)) {
             console.log(`⚠️ [MERCHANT] Already processing: ${messageId}`);
-            return;
+            return false;
         }
 
         processingMessages.add(messageId);
 
-        console.log(`📨 [MERCHANT] Processing email from: ${parsedEmail.from.text}`);
-
         const fromEmail = parsedEmail.from.value[0].address;
         const subject = parsedEmail.subject;
-        const bodyText = parsedEmail.text;
-        const bodyHtml = parsedEmail.html;
+        const bodyText = parsedEmail.text || '';
+
+        console.log(`📨 [MERCHANT] Checking email from: ${fromEmail}`);
+        console.log(`📋 [MERCHANT] Subject: ${subject}`);
+
+        // FILTER 1: Check if from payment gateway domain
+        if (!isPaymentGatewayEmail(fromEmail)) {
+            console.log(`⏭️ [MERCHANT] SKIPPED - Not from payment gateway domain: ${fromEmail}`);
+            return false; // Leave as unread
+        }
+
+        console.log(`✅ [MERCHANT] Domain check passed: ${fromEmail}`);
+
+        // FILTER 2: AI analysis for importance
+        console.log(`🤖 [MERCHANT] Analyzing email with AI...`);
+        const isImportant = await isImportantEmail(subject, bodyText);
+
+        if (!isImportant) {
+            console.log(`⏭️ [MERCHANT] SKIPPED - AI marked as promotional/unimportant`);
+            return false; // Leave as unread
+        }
+
+        console.log(`✅ [MERCHANT] AI check passed - Email is IMPORTANT!`);
 
         // Check if already processed
         const existingMessage = await pool.query(
@@ -167,8 +272,10 @@ const processIncomingEmail = async (merchant, parsedEmail) => {
         if (existingMessage.rows.length > 0) {
             console.log(`⚠️ [MERCHANT] Message already in database: ${messageId}`);
             processingMessages.delete(messageId);
-            return;
+            return true;
         }
+
+        const bodyHtml = parsedEmail.html;
 
         // Store incoming message
         const messageResult = await pool.query(
@@ -183,7 +290,7 @@ const processIncomingEmail = async (merchant, parsedEmail) => {
 
         console.log(`✅ [MERCHANT] Stored conversation ID: ${messageResult.rows[0].id}`);
 
-        // Instantly forward to notification email
+        // Instantly forward to notification email via SendGrid
         console.log(`📤 [MERCHANT] Forwarding to notification email: ${merchant.notification_email}`);
         await forwardEmail(merchant, parsedEmail);
 
@@ -199,8 +306,11 @@ const processIncomingEmail = async (merchant, parsedEmail) => {
 
         console.log(`⏰ [MERCHANT] Reply reminder scheduled for: ${reminderTime.toLocaleString()}`);
 
+        return true; // Email was saved and will be marked as read
+
     } catch (error) {
         console.error('❌ [MERCHANT] Process email error:', error);
+        return false;
     } finally {
         if (messageId) {
             processingMessages.delete(messageId);
@@ -208,21 +318,9 @@ const processIncomingEmail = async (merchant, parsedEmail) => {
     }
 };
 
-// Forward email to notification email
+// Forward email to notification email via SendGrid
 const forwardEmail = async (merchant, parsedEmail) => {
     try {
-        const decryptedPassword = decrypt(merchant.email_password_encrypted);
-
-        const transporter = nodemailer.createTransport({
-            host: merchant.smtp_host || 'smtp.gmail.com',
-            port: merchant.smtp_port || 587,
-            secure: merchant.smtp_port === 465,
-            auth: {
-                user: merchant.email,
-                pass: decryptedPassword
-            }
-        });
-
         const htmlBody = `
             <!DOCTYPE html>
             <html>
@@ -236,7 +334,7 @@ const forwardEmail = async (merchant, parsedEmail) => {
             </head>
             <body>
                 <div class="header">
-                    <h2>🔔 New Email for Merchant: ${merchant.merchant_name}</h2>
+                    <h2>🔔 New IMPORTANT Email for: ${merchant.merchant_name}</h2>
                 </div>
                 <div class="content">
                     <p><strong>From:</strong> ${parsedEmail.from.text}</p>
@@ -248,20 +346,24 @@ const forwardEmail = async (merchant, parsedEmail) => {
                 </div>
                 <div class="footer">
                     <p>⏰ You have 6 hours to reply before getting a reminder</p>
+                    <p>✅ This email was filtered by AI as IMPORTANT</p>
                     <p>This is an automated forward from your Merchant Email Manager</p>
                 </div>
             </body>
             </html>
         `;
 
-        await transporter.sendMail({
-            from: merchant.email,
+        await sendgridHelper.sendEmail({
             to: merchant.notification_email,
+            from: {
+                email: process.env.SMTP_USER || 'chaincraftglobal@gmail.com',
+                name: 'Merchant Email Manager'
+            },
             subject: `🔔 [${merchant.merchant_name}] ${parsedEmail.subject}`,
             html: htmlBody
         });
 
-        console.log(`✅ [MERCHANT] Email forwarded successfully`);
+        console.log(`✅ [MERCHANT] Email forwarded successfully via SendGrid`);
 
     } catch (error) {
         console.error('❌ [MERCHANT] Forward email error:', error);
