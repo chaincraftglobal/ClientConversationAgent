@@ -1,7 +1,7 @@
 const pool = require('../config/database');
 const nodemailer = require('nodemailer');
 const sendgridHelper = require('../utils/sendgridHelper');
-const sendgridHelper = require('../utils/sendgridHelper');
+
 
 class WelcomeEmailService {
 
