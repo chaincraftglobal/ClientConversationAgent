@@ -1,5 +1,7 @@
 const pool = require('../config/database');
 const nodemailer = require('nodemailer');
+const sendgridHelper = require('../utils/sendgridHelper');
+const sendgridHelper = require('../utils/sendgridHelper');
 
 class WelcomeEmailService {
 
@@ -81,72 +83,57 @@ class WelcomeEmailService {
     /**
      * Send welcome email to customer
      */
-    async sendWelcomeEmail(transaction, config) {
-        const logId = await this.createLog(transaction);
+   async sendWelcomeEmail(transaction, config) {
+    const logId = await this.createLog(transaction);
 
-        try {
-            console.log(`📧 Sending welcome email to ${transaction.customer_email}...`);
+    try {
+        console.log(`📧 Sending welcome email to ${transaction.customer_email}...`);
 
-            // Create SMTP transporter
-            // Get SMTP config from database
-            const smtpHost = config.smtp_host || process.env.SMTP_HOST || 'smtp.hostinger.com';
-            const smtpPort = config.smtp_port || parseInt(process.env.SMTP_PORT) || 465;
-            const smtpUser = config.smtp_user || process.env.SMTP_USER;
-            const smtpPassword = config.smtp_password || process.env.SMTP_PASSWORD;
-            const smtpSecure = config.smtp_secure !== undefined ? config.smtp_secure : (smtpPort === 465);
+        // Get email config from database or environment
+        const fromEmail = config.smtp_user || process.env.SMTP_USER || 'support@lacewingtech.in';
+        const fromName = config.from_name || 'Lacewing Technologies';
+        const ccEmail = config.cc_email || 'lacewinginfo@gmail.com';
 
-            if (!smtpUser || !smtpPassword) {
-                throw new Error('SMTP credentials not configured. Please configure in Settings.');
-            }
+        // Format date
+        const formattedDate = new Date(transaction.transaction_date || transaction.created_at || new Date()).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
 
-            // Create SMTP transporter
-            const transporter = nodemailer.createTransport({
-                host: smtpHost,
-                port: smtpPort,
-                secure: smtpSecure,
-                auth: {
-                    user: smtpUser,
-                    pass: smtpPassword
-                }
-            });
+        // Create email HTML
+        const htmlContent = this.createEmailTemplate(transaction, formattedDate, config);
 
-            // Format date
-            const formattedDate = new Date(transaction.transaction_date || transaction.created_at || new Date()).toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-            });
+        console.log(`📧 Sending via SendGrid from ${fromEmail} to ${transaction.customer_email}`);
 
-            // Create email HTML
-            const htmlContent = this.createEmailTemplate(transaction, formattedDate, config);
+        // Send email via SendGrid (Railway blocks SMTP ports)
+        await sendgridHelper.sendEmail({
+            to: transaction.customer_email,
+            cc: ccEmail,
+            from: {
+                email: fromEmail,
+                name: fromName
+            },
+            subject: config.subject_template || '✅ Payment Received - Thank You!',
+            html: htmlContent
+        });
 
-            // Send email
-            const mailOptions = {
-                from: `"${config.from_name || 'Lacewing Technologies'}" <${config.from_email || 'sales@lacewingtech.in'}>`,
-                to: transaction.customer_email,
-                cc: config.cc_email || 'lacewinginfo@gmail.com',
-                subject: config.subject_template || '✅ Payment Received - Thank You!',
-                html: htmlContent
-            };
+        // Update log as sent
+        await this.updateLog(logId, 'sent', null);
 
-            await transporter.sendMail(mailOptions);
+        console.log(`✅ Welcome email sent to ${transaction.customer_email}`);
 
-            // Update log as sent
-            await this.updateLog(logId, 'sent', null);
+        return { success: true };
 
-            console.log(`✅ Welcome email sent to ${transaction.customer_email}`);
+    } catch (error) {
+        console.error(`❌ Failed to send welcome email to ${transaction.customer_email}:`, error);
 
-            return { success: true };
+        // Update log as failed
+        await this.updateLog(logId, 'failed', error.message);
 
-        } catch (error) {
-            console.error(`❌ Failed to send welcome email to ${transaction.customer_email}:`, error);
-
-            // Update log as failed
-            await this.updateLog(logId, 'failed', error.message);
-
-            return { success: false, error: error.message };
-        }
+        return { success: false, error: error.message };
     }
+}
 
     /**
      * Create beautiful HTML email template
