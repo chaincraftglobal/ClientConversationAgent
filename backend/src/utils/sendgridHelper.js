@@ -23,8 +23,8 @@ async function sendEmail({ to, cc, from, subject, html }) {
             html: html
         };
 
-        // Add CC if provided
-        if (cc) {
+        // Add CC if provided AND different from TO (SendGrid doesn't allow duplicates)
+        if (cc && cc.toLowerCase() !== to.toLowerCase()) {
             msg.cc = cc;
         }
 
