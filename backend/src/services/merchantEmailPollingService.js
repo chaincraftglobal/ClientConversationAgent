@@ -73,6 +73,8 @@ IMPORTANT emails include:
 - Follow-up on application
 - Verification needed
 - Important notifications
+- Payment gateway proposals
+- Payment gateway discussions
 
 SKIP (promotional) emails include:
 - Marketing offers
@@ -81,6 +83,8 @@ SKIP (promotional) emails include:
 - General updates
 - Promotional content
 - Event invitations
+- Travel deals
+- Birthday wishes
 
 Respond with ONLY one word: "IMPORTANT" or "SKIP"`;
 
@@ -154,7 +158,7 @@ const pollMerchantInbox = async (merchantId) => {
 
                         console.log(`📬 [MERCHANT] Found ${results.length} new email(s) for merchant ${merchantId}`);
 
-                        const fetch = imap.fetch(results, { bodies: '', markSeen: false }); // Don't mark as seen yet
+                        const fetch = imap.fetch(results, { bodies: '', markSeen: false });
                         const emails = [];
                         let parseCount = 0;
                         let messageCount = 0;
@@ -244,43 +248,37 @@ const processIncomingEmail = async (merchant, parsedEmail) => {
         console.log(`📨 [MERCHANT] Checking email from: ${fromEmail}`);
         console.log(`📋 [MERCHANT] Subject: ${subject}`);
 
-        // FILTER 1: Check if from payment gateway domain
-       // FILTER: Check if from payment gateway domain OR about payment gateways
-const isFromGateway = isPaymentGatewayEmail(fromEmail);
- let isImportant = false; // ✅ Declare here!
+        // FILTER: Check if from payment gateway domain OR about payment gateways
+        const isFromGateway = isPaymentGatewayEmail(fromEmail);
+        let isImportant = false;
 
-if (!isFromGateway) {
-    // Not from gateway domain, check if ABOUT payment gateways with AI
-    console.log(`⚠️ [MERCHANT] Not from gateway domain, checking content with AI: ${fromEmail}`);
-    console.log(`🤖 [MERCHANT] Analyzing email with AI...`);
-    
-    const isImportant = await isImportantEmail(subject, bodyText);
-    
-    if (!isImportant) {
-        console.log(`⏭️ [MERCHANT] SKIPPED - AI marked as not important`);
-        return false;
-    }
-    
-    console.log(`✅ [MERCHANT] AI approved - Email is about payment gateways!`);
-} else {
-    console.log(`✅ [MERCHANT] Domain check passed: ${fromEmail}`);
-    
-    // Still check AI for promotional filter
-    console.log(`🤖 [MERCHANT] Analyzing email with AI...`);
-    const isImportant = await isImportantEmail(subject, bodyText);
-    
-    if (!isImportant) {
-        console.log(`⏭️ [MERCHANT] SKIPPED - AI marked as promotional`);
-        return false;
-    }
-}
-
-        if (!isImportant) {
-            console.log(`⏭️ [MERCHANT] SKIPPED - AI marked as promotional/unimportant`);
-            return false; // Leave as unread
+        if (!isFromGateway) {
+            // Not from gateway domain, check if ABOUT payment gateways with AI
+            console.log(`⚠️ [MERCHANT] Not from gateway domain, checking content with AI: ${fromEmail}`);
+            console.log(`🤖 [MERCHANT] Analyzing email with AI...`);
+            
+            isImportant = await isImportantEmail(subject, bodyText);
+            
+            if (!isImportant) {
+                console.log(`⏭️ [MERCHANT] SKIPPED - AI marked as not important`);
+                return false;
+            }
+            
+            console.log(`✅ [MERCHANT] AI approved - Email is about payment gateways!`);
+        } else {
+            console.log(`✅ [MERCHANT] Domain check passed: ${fromEmail}`);
+            
+            // Still check AI for promotional filter
+            console.log(`🤖 [MERCHANT] Analyzing email with AI...`);
+            isImportant = await isImportantEmail(subject, bodyText);
+            
+            if (!isImportant) {
+                console.log(`⏭️ [MERCHANT] SKIPPED - AI marked as promotional`);
+                return false;
+            }
+            
+            console.log(`✅ [MERCHANT] AI check passed - Email is IMPORTANT!`);
         }
-
-        console.log(`✅ [MERCHANT] AI check passed - Email is IMPORTANT!`);
 
         // Check if already processed
         const existingMessage = await pool.query(
@@ -325,7 +323,7 @@ if (!isFromGateway) {
 
         console.log(`⏰ [MERCHANT] Reply reminder scheduled for: ${reminderTime.toLocaleString()}`);
 
-        return true; // Email was saved and will be marked as read
+        return true;
 
     } catch (error) {
         console.error('❌ [MERCHANT] Process email error:', error);
@@ -337,12 +335,11 @@ if (!isFromGateway) {
     }
 };
 
-// Forward email to notification email using merchant's Gmail SMTP (NO SendGrid!)
+// Forward email to notification email using merchant's Gmail SMTP
 const forwardEmail = async (merchant, parsedEmail) => {
     try {
         const decryptedPassword = decrypt(merchant.email_password_encrypted);
 
-        // Use merchant's own Gmail SMTP (works without SendGrid!)
         const transporter = nodemailer.createTransport({
             host: merchant.smtp_host || 'smtp.gmail.com',
             port: merchant.smtp_port || 587,
