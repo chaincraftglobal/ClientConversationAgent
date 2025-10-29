@@ -4,6 +4,7 @@ const pool = require('../config/database');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const OpenAI = require('openai');
+const sendgridHelper = require('../utils/sendgridHelper'); // ✅ ADD THIS LINE!
 
 // Initialize OpenAI
 const openai = new OpenAI({
