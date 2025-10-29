@@ -247,6 +247,7 @@ const processIncomingEmail = async (merchant, parsedEmail) => {
         // FILTER 1: Check if from payment gateway domain
        // FILTER: Check if from payment gateway domain OR about payment gateways
 const isFromGateway = isPaymentGatewayEmail(fromEmail);
+ let isImportant = false; // ✅ Declare here!
 
 if (!isFromGateway) {
     // Not from gateway domain, check if ABOUT payment gateways with AI
