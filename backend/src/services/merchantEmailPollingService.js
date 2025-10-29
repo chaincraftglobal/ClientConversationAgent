@@ -245,16 +245,34 @@ const processIncomingEmail = async (merchant, parsedEmail) => {
         console.log(`📋 [MERCHANT] Subject: ${subject}`);
 
         // FILTER 1: Check if from payment gateway domain
-        if (!isPaymentGatewayEmail(fromEmail)) {
-            console.log(`⏭️ [MERCHANT] SKIPPED - Not from payment gateway domain: ${fromEmail}`);
-            return false; // Leave as unread
-        }
+       // FILTER: Check if from payment gateway domain OR about payment gateways
+const isFromGateway = isPaymentGatewayEmail(fromEmail);
 
-        console.log(`✅ [MERCHANT] Domain check passed: ${fromEmail}`);
-
-        // FILTER 2: AI analysis for importance
-        console.log(`🤖 [MERCHANT] Analyzing email with AI...`);
-        const isImportant = await isImportantEmail(subject, bodyText);
+if (!isFromGateway) {
+    // Not from gateway domain, check if ABOUT payment gateways with AI
+    console.log(`⚠️ [MERCHANT] Not from gateway domain, checking content with AI: ${fromEmail}`);
+    console.log(`🤖 [MERCHANT] Analyzing email with AI...`);
+    
+    const isImportant = await isImportantEmail(subject, bodyText);
+    
+    if (!isImportant) {
+        console.log(`⏭️ [MERCHANT] SKIPPED - AI marked as not important`);
+        return false;
+    }
+    
+    console.log(`✅ [MERCHANT] AI approved - Email is about payment gateways!`);
+} else {
+    console.log(`✅ [MERCHANT] Domain check passed: ${fromEmail}`);
+    
+    // Still check AI for promotional filter
+    console.log(`🤖 [MERCHANT] Analyzing email with AI...`);
+    const isImportant = await isImportantEmail(subject, bodyText);
+    
+    if (!isImportant) {
+        console.log(`⏭️ [MERCHANT] SKIPPED - AI marked as promotional`);
+        return false;
+    }
+}
 
         if (!isImportant) {
             console.log(`⏭️ [MERCHANT] SKIPPED - AI marked as promotional/unimportant`);
