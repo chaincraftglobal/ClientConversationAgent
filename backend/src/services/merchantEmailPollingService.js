@@ -2,7 +2,7 @@ const Imap = require('imap');
 const { simpleParser } = require('mailparser');
 const pool = require('../config/database');
 const crypto = require('crypto');
-const sendgridHelper = require('../utils/sendgridHelper');
+const nodemailer = require('nodemailer');
 const OpenAI = require('openai');
 
 // Initialize OpenAI
@@ -290,7 +290,7 @@ const processIncomingEmail = async (merchant, parsedEmail) => {
 
         console.log(`✅ [MERCHANT] Stored conversation ID: ${messageResult.rows[0].id}`);
 
-        // Instantly forward to notification email via SendGrid
+        // Instantly forward to notification email using merchant's Gmail SMTP
         console.log(`📤 [MERCHANT] Forwarding to notification email: ${merchant.notification_email}`);
         await forwardEmail(merchant, parsedEmail);
 
@@ -318,9 +318,22 @@ const processIncomingEmail = async (merchant, parsedEmail) => {
     }
 };
 
-// Forward email to notification email via SendGrid
+// Forward email to notification email using merchant's Gmail SMTP (NO SendGrid!)
 const forwardEmail = async (merchant, parsedEmail) => {
     try {
+        const decryptedPassword = decrypt(merchant.email_password_encrypted);
+
+        // Use merchant's own Gmail SMTP (works without SendGrid!)
+        const transporter = nodemailer.createTransport({
+            host: merchant.smtp_host || 'smtp.gmail.com',
+            port: merchant.smtp_port || 587,
+            secure: merchant.smtp_port === 465,
+            auth: {
+                user: merchant.email,
+                pass: decryptedPassword
+            }
+        });
+
         const htmlBody = `
             <!DOCTYPE html>
             <html>
@@ -353,17 +366,14 @@ const forwardEmail = async (merchant, parsedEmail) => {
             </html>
         `;
 
-        await sendgridHelper.sendEmail({
+        await transporter.sendMail({
+            from: merchant.email,
             to: merchant.notification_email,
-            from: {
-                email: process.env.SMTP_USER || 'chaincraftglobal@gmail.com',
-                name: 'Merchant Email Manager'
-            },
             subject: `🔔 [${merchant.merchant_name}] ${parsedEmail.subject}`,
             html: htmlBody
         });
 
-        console.log(`✅ [MERCHANT] Email forwarded successfully via SendGrid`);
+        console.log(`✅ [MERCHANT] Email forwarded successfully via Gmail SMTP`);
 
     } catch (error) {
         console.error('❌ [MERCHANT] Forward email error:', error);
