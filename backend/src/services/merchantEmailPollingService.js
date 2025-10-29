@@ -336,20 +336,9 @@ const processIncomingEmail = async (merchant, parsedEmail) => {
 };
 
 // Forward email to notification email using merchant's Gmail SMTP
+// Forward email to notification email using SendGrid
 const forwardEmail = async (merchant, parsedEmail) => {
     try {
-        const decryptedPassword = decrypt(merchant.email_password_encrypted);
-
-        const transporter = nodemailer.createTransport({
-            host: merchant.smtp_host || 'smtp.gmail.com',
-            port: merchant.smtp_port || 587,
-            secure: merchant.smtp_port === 465,
-            auth: {
-                user: merchant.email,
-                pass: decryptedPassword
-            }
-        });
-
         const htmlBody = `
             <!DOCTYPE html>
             <html>
@@ -376,20 +365,24 @@ const forwardEmail = async (merchant, parsedEmail) => {
                 <div class="footer">
                     <p>⏰ You have 6 hours to reply before getting a reminder</p>
                     <p>✅ This email was filtered by AI as IMPORTANT</p>
-                    <p>This is an automated forward from your Merchant Email Manager</p>
+                    <p>This is an automated forward from Lacewing Technologies</p>
                 </div>
             </body>
             </html>
         `;
 
-        await transporter.sendMail({
-            from: merchant.email,
+        // Use SendGrid (Railway blocks merchant's Gmail SMTP)
+        await sendgridHelper.sendEmail({
             to: merchant.notification_email,
+            from: {
+                email: 'support@lacewingtech.in',
+                name: 'Lacewing Merchant Manager'
+            },
             subject: `🔔 [${merchant.merchant_name}] ${parsedEmail.subject}`,
             html: htmlBody
         });
 
-        console.log(`✅ [MERCHANT] Email forwarded successfully via Gmail SMTP`);
+        console.log(`✅ [MERCHANT] Email forwarded successfully via SendGrid`);
 
     } catch (error) {
         console.error('❌ [MERCHANT] Forward email error:', error);
