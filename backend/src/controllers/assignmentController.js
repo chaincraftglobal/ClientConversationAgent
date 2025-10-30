@@ -112,14 +112,16 @@ const createAssignment = async (req, res) => {
 // Get all assignments
 const getAllAssignments = async (req, res) => {
     try {
-        // Check if agent_client_assignments table exists
+        // First check if the assignments table exists
         const tableCheck = await pool.query(
             `SELECT EXISTS (
                 SELECT FROM information_schema.tables 
-                WHERE table_name = 'agent_client_assignments'
+                WHERE table_schema = 'public'
+                AND table_name = 'agent_client_assignments'
             )`
         );
 
+        // If table doesn't exist, return empty array gracefully
         if (!tableCheck.rows[0].exists) {
             console.log('ℹ️  [ASSIGNMENTS] Assignments feature not configured yet');
             return res.status(200).json({
@@ -131,18 +133,27 @@ const getAllAssignments = async (req, res) => {
             });
         }
 
+        // Table exists, fetch assignments
         const result = await pool.query(
             `SELECT 
-        a.id, a.agent_id, a.client_id, a.project_name, 
-        a.project_description, a.status, a.assigned_at,
-        ag.name as agent_name, ag.email as agent_email,
-        c.name as client_name, c.email as client_email
-       FROM agent_client_assignments a
-       JOIN agents ag ON a.agent_id = ag.id
-       JOIN clients c ON a.client_id = c.id
-       ORDER BY a.assigned_at DESC`
+                a.id, 
+                a.agent_id, 
+                a.client_id, 
+                a.project_name, 
+                a.project_description, 
+                a.status, 
+                a.assigned_at,
+                ag.name as agent_name, 
+                ag.email as agent_email,
+                c.name as client_name, 
+                c.email as client_email
+             FROM agent_client_assignments a
+             LEFT JOIN agents ag ON a.agent_id = ag.id
+             LEFT JOIN clients c ON a.client_id = c.id
+             ORDER BY a.assigned_at DESC`
         );
-        // ✅ Removed c.company (column doesn't exist)
+        // ✅ Removed c.company (column doesn't exist yet)
+        // ✅ Changed to LEFT JOIN (safer if related records missing)
 
         res.status(200).json({
             success: true,
@@ -153,7 +164,8 @@ const getAllAssignments = async (req, res) => {
         });
 
     } catch (error) {
-        console.log('ℹ️  [ASSIGNMENTS] Assignments feature not configured yet');
+        // Catch any other errors gracefully
+        console.log('ℹ️  [ASSIGNMENTS] Error fetching assignments:', error.message);
         res.status(200).json({
             success: true,
             data: {
@@ -161,6 +173,11 @@ const getAllAssignments = async (req, res) => {
                 count: 0
             }
         });
+    }
+};
+
+
+
 
 // Get single assignment by ID
 const getAssignmentById = async (req, res) => {
