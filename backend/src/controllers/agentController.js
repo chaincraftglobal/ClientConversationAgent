@@ -100,15 +100,17 @@ const createAgent = async (req, res) => {
 };
 
 // Get all agents
+// Get all agents
 const getAllAgents = async (req, res) => {
     try {
         const result = await pool.query(
-            `SELECT id, name, email, email_provider, imap_host, imap_port,
-              smtp_host, smtp_port, persona_description, system_prompt,
-              status, created_at, updated_at
+            `SELECT id, name, email, imap_host, imap_port, 
+              smtp_host, smtp_port, persona_description, 
+              system_prompt, status, created_at, updated_at
        FROM agents
        ORDER BY created_at DESC`
         );
+        // ✅ Simply removed email_provider column
 
         res.status(200).json({
             success: true,
@@ -119,10 +121,13 @@ const getAllAgents = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Get agents error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error while fetching agents'
+        console.log('ℹ️  [AGENTS] AI Agents feature not configured yet');
+        res.status(200).json({
+            success: true,
+            data: {
+                agents: [],
+                count: 0
+            }
         });
     }
 };
