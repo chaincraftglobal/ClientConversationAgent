@@ -313,14 +313,16 @@ const processIncomingEmail = async (merchant, parsedEmail) => {
         await forwardEmail(merchant, parsedEmail);
 
         // Create 6-hour reminder to reply
-        const reminderTime = new Date();
-        reminderTime.setHours(reminderTime.getHours() + 6);
+       // Import at top of file
+const MerchantReminderService = require('./merchantReminderService');
 
-        await pool.query(
-            `INSERT INTO merchant_reminders (conversation_id, reminder_type, scheduled_for)
-             VALUES ($1, 'reply_reminder', $2)`,
-            [messageResult.rows[0].id, reminderTime]
-        );
+// ...then in the code:
+
+// Create reminder (5 minutes for testing, 360 for production)
+await MerchantReminderService.createReplyReminder(
+    messageResult.rows[0].id, 
+    5  // ✅ Change this: 5=5min, 10=10min, 60=1hr, 360=6hr
+);
 
         console.log(`⏰ [MERCHANT] Reply reminder scheduled for: ${reminderTime.toLocaleString()}`);
 

@@ -1,5 +1,5 @@
 const pool = require('../config/database');
-const nodemailer = require('nodemailer');
+const sendgridHelper = require('../utils/sendgridHelper');
 const crypto = require('crypto');
 
 // Encryption
@@ -76,7 +76,7 @@ class MerchantReminderService {
     }
 
     /**
-     * Send reply reminder (6 hours after receiving email)
+     * Send reply reminder (after X hours/minutes)
      */
     async sendReplyReminder(reminder) {
         try {
@@ -96,19 +96,6 @@ class MerchantReminderService {
                 );
                 return;
             }
-
-            const decryptedPassword = decrypt(reminder.email_password_encrypted);
-
-            // Use merchant's Gmail SMTP (NOT SendGrid!)
-            const transporter = nodemailer.createTransport({
-                host: reminder.smtp_host || 'smtp.gmail.com',
-                port: reminder.smtp_port || 587,
-                secure: reminder.smtp_port === 465,
-                auth: {
-                    user: reminder.merchant_email,
-                    pass: decryptedPassword
-                }
-            });
 
             const htmlBody = `
                 <!DOCTYPE html>
@@ -131,7 +118,6 @@ class MerchantReminderService {
                         <p><strong>Merchant Account:</strong> ${reminder.merchant_name} (${reminder.merchant_email})</p>
                         <p><strong>From:</strong> ${reminder.from_email}</p>
                         <p><strong>Subject:</strong> ${reminder.subject}</p>
-                        <p><strong>Received:</strong> 6+ hours ago</p>
                         
                         <div class="email-preview">
                             <strong>Email Content Preview:</strong>
@@ -148,9 +134,13 @@ class MerchantReminderService {
                 </html>
             `;
 
-            await transporter.sendMail({
-                from: reminder.merchant_email,
+            // Use SendGrid (Railway blocks SMTP ports)
+            await sendgridHelper.sendEmail({
                 to: reminder.notification_email,
+                from: {
+                    email: 'support@lacewingtech.in',
+                    name: 'Lacewing Reminder System'
+                },
                 subject: `⏰ REMINDER: Reply needed for ${reminder.merchant_name}`,
                 html: htmlBody
             });
@@ -161,7 +151,7 @@ class MerchantReminderService {
                 [reminder.id]
             );
 
-            console.log('✅ [REMINDER] Reply reminder sent successfully via Gmail SMTP');
+            console.log('✅ [REMINDER] Reply reminder sent successfully via SendGrid');
 
         } catch (error) {
             console.error('❌ [REMINDER] Error sending reply reminder:', error);
@@ -170,7 +160,7 @@ class MerchantReminderService {
     }
 
     /**
-     * Send auto follow-up (18 hours after you replied)
+     * Send auto follow-up (after X hours)
      */
     async sendFollowUp(reminder) {
         try {
@@ -197,19 +187,6 @@ class MerchantReminderService {
                 return;
             }
 
-            const decryptedPassword = decrypt(reminder.email_password_encrypted);
-
-            // Use merchant's Gmail SMTP (NOT SendGrid!)
-            const transporter = nodemailer.createTransport({
-                host: reminder.smtp_host || 'smtp.gmail.com',
-                port: reminder.smtp_port || 587,
-                secure: reminder.smtp_port === 465,
-                auth: {
-                    user: reminder.merchant_email,
-                    pass: decryptedPassword
-                }
-            });
-
             const followUpText = `Hi,
 
 I hope this email finds you well. I wanted to follow up on my previous email regarding the payment gateway application.
@@ -220,11 +197,15 @@ Looking forward to hearing from you.
 
 Best regards`;
 
-            await transporter.sendMail({
-                from: reminder.merchant_email,
+            // Use SendGrid (Railway blocks SMTP ports)
+            await sendgridHelper.sendEmail({
                 to: reminder.from_email,
+                from: {
+                    email: 'support@lacewingtech.in',
+                    name: reminder.merchant_name
+                },
                 subject: `Re: ${reminder.subject}`,
-                text: followUpText
+                html: followUpText.replace(/\n/g, '<br>')
             });
 
             // Mark as sent
@@ -239,7 +220,7 @@ Best regards`;
                 [reminder.conversation_id]
             );
 
-            console.log('✅ [REMINDER] Auto follow-up sent successfully via Gmail SMTP');
+            console.log('✅ [REMINDER] Auto follow-up sent successfully via SendGrid');
 
         } catch (error) {
             console.error('❌ [REMINDER] Error sending follow-up:', error);
@@ -248,13 +229,14 @@ Best regards`;
     }
 
     /**
-     * Create follow-up reminder when user replies
+     * Create follow-up reminder with custom timing
+     * @param {number} conversationId - Conversation ID
+     * @param {number} minutes - Minutes from now (default 18 hours = 1080 minutes)
      */
-    async createFollowUpReminder(conversationId) {
+    async createFollowUpReminder(conversationId, minutes = 1080) {
         try {
-            // Schedule follow-up for 18 hours from now
             const followUpTime = new Date();
-            followUpTime.setHours(followUpTime.getHours() + 18);
+            followUpTime.setMinutes(followUpTime.getMinutes() + minutes);
 
             await pool.query(
                 `INSERT INTO merchant_reminders (conversation_id, reminder_type, scheduled_for)
@@ -262,10 +244,69 @@ Best regards`;
                 [conversationId, followUpTime]
             );
 
-            console.log(`⏰ [REMINDER] Follow-up reminder scheduled for: ${followUpTime.toLocaleString()}`);
+            const hours = Math.floor(minutes / 60);
+            const mins = minutes % 60;
+            const timeStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+
+            console.log(`⏰ [REMINDER] Follow-up reminder scheduled for: ${followUpTime.toLocaleString()} (in ${timeStr})`);
 
         } catch (error) {
             console.error('❌ [REMINDER] Error creating follow-up reminder:', error);
+        }
+    }
+
+    /**
+     * Create reply reminder with custom timing
+     * @param {number} conversationId - Conversation ID
+     * @param {number} minutes - Minutes from now (default 6 hours = 360 minutes)
+     */
+    async createReplyReminder(conversationId, minutes = 360) {
+        try {
+            const reminderTime = new Date();
+            reminderTime.setMinutes(reminderTime.getMinutes() + minutes);
+
+            await pool.query(
+                `INSERT INTO merchant_reminders (conversation_id, reminder_type, scheduled_for)
+                 VALUES ($1, 'reply_reminder', $2)`,
+                [conversationId, reminderTime]
+            );
+
+            const hours = Math.floor(minutes / 60);
+            const mins = minutes % 60;
+            const timeStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+
+            console.log(`⏰ [REMINDER] Reply reminder scheduled for: ${reminderTime.toLocaleString()} (in ${timeStr})`);
+
+        } catch (error) {
+            console.error('❌ [REMINDER] Error creating reply reminder:', error);
+        }
+    }
+
+    /**
+     * Update existing reminder time
+     * @param {number} reminderId - Reminder ID
+     * @param {number} minutes - Minutes from now
+     */
+    async updateReminderTime(reminderId, minutes) {
+        try {
+            const newTime = new Date();
+            newTime.setMinutes(newTime.getMinutes() + minutes);
+
+            await pool.query(
+                `UPDATE merchant_reminders 
+                 SET scheduled_for = $1, snoozed_until = NULL 
+                 WHERE id = $2`,
+                [newTime, reminderId]
+            );
+
+            const hours = Math.floor(minutes / 60);
+            const mins = minutes % 60;
+            const timeStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+
+            console.log(`⏰ [REMINDER] Updated reminder ${reminderId} to: ${newTime.toLocaleString()} (in ${timeStr})`);
+
+        } catch (error) {
+            console.error('❌ [REMINDER] Error updating reminder time:', error);
         }
     }
 }
