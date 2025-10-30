@@ -256,38 +256,44 @@ const merchantController = {
     },
 
     // Snooze reminder
-    snoozeReminder: async (req, res) => {
-        try {
-            const { id } = req.params;
-            const { hours } = req.body;
+   // Snooze reminder
+snoozeReminder: async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { minutes } = req.body;  // ✅ CHANGED FROM hours TO minutes
+        
+        console.log(`⏰ [SNOOZE] Request received for conversation ${id}, minutes: ${minutes}`);
 
-            if (!hours || hours < 1) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Hours must be at least 1'
-                });
-            }
-
-            const snoozeUntil = new Date();
-            snoozeUntil.setHours(snoozeUntil.getHours() + hours);
-
-            await pool.query(
-                'UPDATE merchant_reminders SET snoozed_until = $1 WHERE conversation_id = $2 AND sent = false',
-                [snoozeUntil, id]
-            );
-
-            res.json({
-                success: true,
-                message: `Reminder snoozed for ${hours} hour(s)`
-            });
-        } catch (error) {
-            console.error('Error snoozing reminder:', error);
-            res.status(500).json({
+        if (!minutes || minutes <= 0) {  // ✅ VALIDATE minutes
+            console.log(`❌ [SNOOZE] Invalid minutes: ${minutes}`);
+            return res.status(400).json({
                 success: false,
-                message: 'Failed to snooze reminder'
+                message: 'Minutes must be greater than 0'
             });
         }
-    },
+
+        const snoozeUntil = new Date();
+        snoozeUntil.setMinutes(snoozeUntil.getMinutes() + minutes);  // ✅ USE minutes
+
+        await pool.query(
+            'UPDATE merchant_reminders SET snoozed_until = $1 WHERE conversation_id = $2 AND sent = false',
+            [snoozeUntil, id]
+        );
+
+        console.log(`✅ [SNOOZE] Snoozed until: ${snoozeUntil.toLocaleString()}`);
+
+        res.json({
+            success: true,
+            message: `Reminder snoozed for ${minutes} minute(s)`  // ✅ SHOW minutes
+        });
+    } catch (error) {
+        console.error('❌ [SNOOZE] Error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to snooze reminder'
+        });
+    }
+},
 
     // Get dashboard summary
     getDashboard: async (req, res) => {
@@ -419,6 +425,7 @@ module.exports = {
     getAllConversations: merchantController.getAllConversations,
     markAsReplied: merchantController.markAsReplied,
     snoozeReminder: merchantController.snoozeReminder,
+    
     getDashboard: merchantController.getDashboard,
     testCredentials: merchantController.testCredentials  // ✅ ADD THIS
 };
