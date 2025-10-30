@@ -110,7 +110,7 @@ export const merchantAPI = {
     // Conversations
     getAllConversations: (params) => api.get('/merchants/conversations', { params }),
     markAsReplied: (id) => api.post(`/merchants/conversations/${id}/mark-replied`),
-    snoozeReminder: (id, hours) => api.post(`/merchants/conversations/${id}/snooze`, { hours }),
+   snoozeReminder: (id, minutes) => api.post(`/merchants/conversations/${id}/snooze`, { minutes }),
 
     // Dashboard
     getDashboard: () => api.get('/merchants/dashboard')
