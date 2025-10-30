@@ -3,9 +3,9 @@ const { simpleParser } = require('mailparser');
 const pool = require('../config/database');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const sendgridHelper = require('../utils/sendgridHelper');
+const MerchantReminderService = require('./merchantReminderService');
 const OpenAI = require('openai');
-const sendgridHelper = require('../utils/sendgridHelper'); // ✅ ADD THIS LINE!
-const MerchantReminderService = require('./merchantReminderService'); // ✅ ADD THIS
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -107,6 +107,62 @@ Respond with ONLY one word: "IMPORTANT" or "SKIP"`;
     }
 };
 
+/**
+ * Check if current time is within merchant's working hours
+ */
+const isWithinWorkingHours = (merchant) => {
+    try {
+        const now = new Date();
+        
+        // Convert to IST (India Standard Time)
+        const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+        
+        // Get current day (0=Sunday, 1=Monday, etc.)
+        const currentDay = istTime.getDay();
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const currentDayName = dayNames[currentDay];
+        
+        // Check if today is a working day
+        const workingDays = merchant.working_days || [];
+        
+        if (workingDays.length === 0) {
+            // No working days configured, allow all days
+            console.log(`⚠️ [MERCHANT] ${merchant.merchant_name} - No working days configured, allowing all days`);
+        } else if (!workingDays.includes(currentDayName)) {
+            console.log(`⏰ [MERCHANT] ${merchant.merchant_name} - ${currentDayName} is not a working day`);
+            return false;
+        }
+        
+        // Check working hours
+        const startTime = merchant.start_time || '08:30';
+        const endTime = merchant.end_time || '21:00';
+        
+        const currentHour = istTime.getHours();
+        const currentMinute = istTime.getMinutes();
+        const currentTimeStr = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
+        
+        // Parse start and end times
+        const [startHour, startMin] = startTime.split(':').map(Number);
+        const [endHour, endMin] = endTime.split(':').map(Number);
+        
+        const currentTotalMinutes = currentHour * 60 + currentMinute;
+        const startTotalMinutes = startHour * 60 + startMin;
+        const endTotalMinutes = endHour * 60 + endMin;
+        
+        if (currentTotalMinutes < startTotalMinutes || currentTotalMinutes > endTotalMinutes) {
+            console.log(`⏰ [MERCHANT] ${merchant.merchant_name} - Outside working hours (${startTime}-${endTime}), current: ${currentTimeStr} IST`);
+            return false;
+        }
+        
+        console.log(`✅ [MERCHANT] ${merchant.merchant_name} - Within working hours (${currentDayName} ${currentTimeStr} IST)`);
+        return true;
+        
+    } catch (error) {
+        console.error('❌ [MERCHANT] Error checking working hours:', error);
+        return true; // Fail-safe: allow polling if check fails
+    }
+};
+
 // Poll inbox for a specific merchant account
 const pollMerchantInbox = async (merchantId) => {
     try {
@@ -123,6 +179,13 @@ const pollMerchantInbox = async (merchantId) => {
         }
 
         const merchant = merchantResult.rows[0];
+        
+        // ✅ CHECK WORKING HOURS BEFORE POLLING!
+        if (!isWithinWorkingHours(merchant)) {
+            console.log(`⏸️ [MERCHANT] Skipping ${merchant.merchant_name} - Outside working hours/days`);
+            return { newEmails: 0, skipped: true };
+        }
+
         const decryptedPassword = decrypt(merchant.email_password_encrypted);
 
         const imapConfig = {
@@ -309,23 +372,15 @@ const processIncomingEmail = async (merchant, parsedEmail) => {
 
         console.log(`✅ [MERCHANT] Stored conversation ID: ${messageResult.rows[0].id}`);
 
-        // Instantly forward to notification email using merchant's Gmail SMTP
+        // Forward to notification email
         console.log(`📤 [MERCHANT] Forwarding to notification email: ${merchant.notification_email}`);
         await forwardEmail(merchant, parsedEmail);
 
-        // Create 6-hour reminder to reply
-       // Import at top of file
-const MerchantReminderService = require('./merchantReminderService');
-
-// ...then in the code:
-
-// Create reminder (5 minutes for testing, 360 for production)
-await MerchantReminderService.createReplyReminder(
-    messageResult.rows[0].id, 
-    5  // ✅ Change this: 5=5min, 10=10min, 60=1hr, 360=6hr
-);
-
-        console.log(`⏰ [MERCHANT] Reply reminder scheduled for: ${reminderTime.toLocaleString()}`);
+        // Create reminder (180 minutes = 3 hours)
+        await MerchantReminderService.createReplyReminder(
+            messageResult.rows[0].id,
+            180  // ✅ 3 hours = 180 minutes
+        );
 
         return true;
 
@@ -339,7 +394,6 @@ await MerchantReminderService.createReplyReminder(
     }
 };
 
-// Forward email to notification email using merchant's Gmail SMTP
 // Forward email to notification email using SendGrid
 const forwardEmail = async (merchant, parsedEmail) => {
     try {
@@ -367,7 +421,7 @@ const forwardEmail = async (merchant, parsedEmail) => {
                     <div>${parsedEmail.html || parsedEmail.text}</div>
                 </div>
                 <div class="footer">
-                    <p>⏰ You have 6 hours to reply before getting a reminder</p>
+                    <p>⏰ You have 3 hours to reply before getting a reminder</p>
                     <p>✅ This email was filtered by AI as IMPORTANT</p>
                     <p>This is an automated forward from Lacewing Technologies</p>
                 </div>
@@ -375,7 +429,6 @@ const forwardEmail = async (merchant, parsedEmail) => {
             </html>
         `;
 
-        // Use SendGrid (Railway blocks merchant's Gmail SMTP)
         await sendgridHelper.sendEmail({
             to: merchant.notification_email,
             from: {

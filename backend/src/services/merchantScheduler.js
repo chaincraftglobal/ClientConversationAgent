@@ -23,7 +23,7 @@ class MerchantScheduler {
         console.log('⏰ [MERCHANT SCHEDULER] Starting email polling (every 3 minutes)...');
 
         // Run every 3 minutes
-        this.pollingTask = cron.schedule('*/3 * * * *', async () => {
+        this.pollingTask = cron.schedule('0 * * * *', async () => {
             try {
                 console.log('\n⏰ [MERCHANT] Cron job triggered - polling emails');
                 await pollAllMerchants();
