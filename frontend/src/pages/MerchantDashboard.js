@@ -51,18 +51,22 @@ const MerchantDashboard = () => {
         }
     };
 
-    const handleSnooze = async (conversationId) => {
-        const hours = prompt('Snooze reminder for how many hours?', '3');
-        if (!hours) return;
-        try {
-            await merchantAPI.snoozeReminder(conversationId, parseInt(hours));
-            alert(`✅ Reminder snoozed for ${hours} hour(s)`);
-            fetchData();
-        } catch (error) {
-            console.error('Error snoozing reminder:', error);
-            alert('❌ Failed to snooze reminder');
-        }
-    };
+  const handleSnooze = async (conversationId) => {
+    const hours = prompt('Snooze reminder for how many hours?', '3');
+    if (!hours) return;
+    
+    try {
+        const hoursNum = parseInt(hours);
+        const minutes = hoursNum * 60; // ✅ Convert to minutes
+        
+        await merchantAPI.snoozeReminder(conversationId, minutes); // ✅ Send minutes
+        alert(`✅ Reminder snoozed for ${hoursNum} hour(s)`);
+        fetchData();
+    } catch (error) {
+        console.error('Error snoozing reminder:', error);
+        alert('❌ Failed to snooze reminder');
+    }
+};
 
     const handleDeleteAccount = async (accountId) => {
         if (!window.confirm('Delete this merchant account? This will delete all conversations too!')) return;
