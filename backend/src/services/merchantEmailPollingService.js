@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const OpenAI = require('openai');
 const sendgridHelper = require('../utils/sendgridHelper'); // ✅ ADD THIS LINE!
+const MerchantReminderService = require('./merchantReminderService'); // ✅ ADD THIS
 
 // Initialize OpenAI
 const openai = new OpenAI({
