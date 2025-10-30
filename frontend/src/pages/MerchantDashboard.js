@@ -51,16 +51,28 @@ const MerchantDashboard = () => {
         }
     };
 
-  const handleSnooze = async (conversationId) => {
+const handleSnooze = async (conversationId) => {
     const hours = prompt('Snooze reminder for how many hours?', '3');
     if (!hours) return;
     
     try {
-        const hoursNum = parseInt(hours);
-        const minutes = hoursNum * 60; // ✅ Convert to minutes
+        const hoursNum = parseFloat(hours);  // ✅ CORRECT - handles decimals!
         
-        await merchantAPI.snoozeReminder(conversationId, minutes); // ✅ Send minutes
-        alert(`✅ Reminder snoozed for ${hoursNum} hour(s)`);
+        if (isNaN(hoursNum) || hoursNum <= 0) {
+            alert('❌ Please enter a valid number');
+            return;
+        }
+        
+        const minutes = Math.round(hoursNum * 60);  // ✅ Round to whole minutes
+        
+        await merchantAPI.snoozeReminder(conversationId, minutes);
+        
+        // Show user-friendly message
+        const displayTime = hoursNum < 1 
+            ? `${minutes} minute(s)` 
+            : `${hoursNum} hour(s)`;
+        
+        alert(`✅ Reminder snoozed for ${displayTime}`);
         fetchData();
     } catch (error) {
         console.error('Error snoozing reminder:', error);
