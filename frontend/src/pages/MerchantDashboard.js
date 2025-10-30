@@ -56,14 +56,14 @@ const handleSnooze = async (conversationId) => {
     if (!hours) return;
     
     try {
-        const hoursNum = parseFloat(hours);  // ✅ CORRECT - handles decimals!
+        const hoursNum = parseFloat(hours);
         
         if (isNaN(hoursNum) || hoursNum <= 0) {
             alert('❌ Please enter a valid number');
             return;
         }
         
-        const minutes = Math.round(hoursNum * 60);  // ✅ Round to whole minutes
+        const minutes = Math.round(hoursNum * 60);
         
         await merchantAPI.snoozeReminder(conversationId, minutes);
         
@@ -72,7 +72,7 @@ const handleSnooze = async (conversationId) => {
             ? `${minutes} minute(s)` 
             : `${hoursNum} hour(s)`;
         
-        alert(`✅ Reminder snoozed for ${displayTime}`);
+        alert(`✅ Reminder snoozed for ${displayTime}`);  // ✅ FIXED!
         fetchData();
     } catch (error) {
         console.error('Error snoozing reminder:', error);
